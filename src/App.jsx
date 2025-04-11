@@ -213,47 +213,48 @@ export default function App() {
         updatedAt: new Date().toISOString()
       };
 
-      const syncedNote = await notionOAuth.syncNote(newNote, notionAuth.accessToken);
-      
-      if (syncedNote.synced) {
-        // Remove the synced note from local storage and state
-        setNotes(prevNotes => {
-          const updatedNotes = prevNotes.filter(note => note.id !== newNote.id);
-          localStorage.setItem('notes', JSON.stringify(updatedNotes));
-          return updatedNotes;
-        });
-        
-        // Reset form
-        setNoteTitle('');
-        setNoteContent('');
-        setSelectedTags([]);
-        setSelectedCategory('');
-        setCurrentNoteId(null);
-      } else {
-        // If sync failed, keep the note in local storage
-        setNotes(prevNotes => {
-          const existingNoteIndex = prevNotes.findIndex(n => n.id === newNote.id);
-          if (existingNoteIndex >= 0) {
-            const updatedNotes = [...prevNotes];
-            updatedNotes[existingNoteIndex] = { ...newNote, synced: false, syncError: syncedNote.syncError };
-            localStorage.setItem('notes', JSON.stringify(updatedNotes));
-            return updatedNotes;
-          }
-          const updatedNotes = [...prevNotes, { ...newNote, synced: false, syncError: syncedNote.syncError }];
-          localStorage.setItem('notes', JSON.stringify(updatedNotes));
-          return updatedNotes;
-        });
-        setConnectionError(syncedNote.syncError || 'Failed to sync note with Notion');
-      }
-    } catch (error) {
-      console.error('Error saving note:', error);
-      setConnectionError(error.message);
-      // Keep the note in local storage if sync failed
+      // Always save to local storage first
       setNotes(prevNotes => {
-        const updatedNotes = [...prevNotes, { ...newNote, synced: false, syncError: error.message }];
+        const existingNoteIndex = prevNotes.findIndex(n => n.id === newNote.id);
+        if (existingNoteIndex >= 0) {
+          const updatedNotes = [...prevNotes];
+          updatedNotes[existingNoteIndex] = { ...newNote, synced: false };
+          localStorage.setItem('notes', JSON.stringify(updatedNotes));
+          return updatedNotes;
+        }
+        const updatedNotes = [...prevNotes, { ...newNote, synced: false }];
         localStorage.setItem('notes', JSON.stringify(updatedNotes));
         return updatedNotes;
       });
+
+      // Try to sync with Notion if online
+      if (connected) {
+        const syncedNote = await notionOAuth.syncNote(newNote, notionAuth.accessToken);
+        
+        if (syncedNote.synced) {
+          // Update the note in local storage with synced status
+          setNotes(prevNotes => {
+            const updatedNotes = prevNotes.map(note => 
+              note.id === newNote.id ? { ...note, synced: true } : note
+            );
+            localStorage.setItem('notes', JSON.stringify(updatedNotes));
+            return updatedNotes;
+          });
+        } else {
+          setConnectionError(syncedNote.syncError || 'Failed to sync note with Notion');
+        }
+      }
+
+      // Reset form fields regardless of sync status
+      setNoteTitle('');
+      setNoteContent('');
+      setSelectedTags([]);
+      setSelectedCategory('');
+      setCurrentNoteId(null);
+    
+    } catch (error) {
+      console.error('Error saving note:', error);
+      setConnectionError(error.message);
     } finally {
       setIsSyncing(false);
     }

@@ -1,4 +1,20 @@
-const API_BASE_URL = 'http://localhost:3001/api/notion'
+// Get the API base URL based on the environment
+const getApiBaseUrl = () => {
+  if (import.meta.env.DEV) {
+    // Check if we're accessing from a mobile device
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    if (isMobile) {
+      // Use the local IP address of the computer running the backend
+      return 'http://192.168.1.100:3001/api/notion'; // Replace with your computer's local IP
+    }
+    // For desktop, use localhost
+    return 'http://localhost:3001/api/notion';
+  }
+  // In production, use the relative path
+  return '/api/notion';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 export const notionOAuth = {
   getAuthUrl: async () => {

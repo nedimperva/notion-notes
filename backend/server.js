@@ -9,7 +9,11 @@ const port = process.env.PORT || 3001;
 
 // Enable CORS for all routes
 app.use(cors({
-  origin: 'http://localhost:5173', // Your Vite frontend URL
+  origin: [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://192.168.1.12:5173' // Replace with your computer's local IP
+  ],
   credentials: true
 }));
 app.use(express.json());
@@ -360,8 +364,24 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error', details: err.message });
 });
 
-app.listen(port, () => {
+// Get the local IP address
+const getLocalIP = () => {
+  const interfaces = require('os').networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return 'localhost';
+};
+
+const localIP = getLocalIP();
+
+app.listen(port, '0.0.0.0', () => {
   console.log(`Server running on port ${port}`);
+  console.log('Local network URL:', `http://${localIP}:${port}`);
   console.log('Notion Client ID:', NOTION_CLIENT_ID);
   console.log('Redirect URI:', REDIRECT_URI);
 }); 
