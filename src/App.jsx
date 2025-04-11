@@ -195,6 +195,9 @@ export default function App() {
     }
   }
 
+  // Filter out synced notes when displaying
+  const unsyncedNotes = notes.filter(note => !note.synced)
+
   const handleSaveNote = async () => {
     if (!notionAuth) {
       setConnectionError('Please connect to Notion first');
@@ -313,7 +316,7 @@ export default function App() {
               New Note
             </button>
             <div className="space-y-2">
-              {notes && notes.map(note => {
+              {unsyncedNotes.map(note => {
                 // Skip empty notes
                 if (!note.title && !note.content) return null;
                 
