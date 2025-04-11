@@ -13,21 +13,28 @@ app.use(cors({
     'http://localhost:5173',
     'http://127.0.0.1:5173',
     'http://192.168.1.100:5173',
-    'https://thought-base.onrender.com' // Add your Render frontend URL here
+    'https://thought-base.onrender.com'
   ],
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 
 // Verify environment variables
 const NOTION_CLIENT_ID = process.env.NOTION_CLIENT_ID;
 const NOTION_CLIENT_SECRET = process.env.NOTION_CLIENT_SECRET;
-const REDIRECT_URI = process.env.REDIRECT_URI || 'http://localhost:5173/auth/callback';
+const REDIRECT_URI = process.env.FRONTEND_URL + '/auth/callback';
 
 if (!NOTION_CLIENT_ID || !NOTION_CLIENT_SECRET) {
   console.error('Missing required environment variables: NOTION_CLIENT_ID or NOTION_CLIENT_SECRET');
   process.exit(1);
 }
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
 
 // Get the OAuth URL
 app.get('/api/notion/auth-url', (req, res) => {

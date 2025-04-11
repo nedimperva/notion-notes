@@ -10,8 +10,8 @@ const getApiBaseUrl = () => {
     // For desktop, use localhost
     return 'http://localhost:3001/api/notion';
   }
-  // In production, use the relative path
-  return '/api/notion';
+  // In production, use the environment variable
+  return import.meta.env.VITE_API_URL + '/api/notion';
 };
 
 const API_BASE_URL = getApiBaseUrl();
@@ -19,108 +19,125 @@ const API_BASE_URL = getApiBaseUrl();
 export const notionOAuth = {
   getAuthUrl: async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth-url`)
+      console.log('Fetching auth URL from:', `${API_BASE_URL}/auth-url`);
+      const response = await fetch(`${API_BASE_URL}/auth-url`, {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
       if (!response.ok) {
-        throw new Error('Failed to get auth URL')
+        const error = await response.json();
+        console.error('Auth URL error response:', error);
+        throw new Error(error.message || 'Failed to get auth URL');
       }
-      const data = await response.json()
-      console.log('Received auth URL:', data.url)
-      return data.url
+      
+      const data = await response.json();
+      console.log('Received auth URL:', data.url);
+      return data.url;
     } catch (error) {
-      console.error('Error getting auth URL:', error)
-      throw error
+      console.error('Error getting auth URL:', error);
+      throw error;
     }
   },
 
   exchangeCodeForToken: async (code) => {
     try {
+      console.log('Exchanging code for token at:', `${API_BASE_URL}/token`);
       const response = await fetch(`${API_BASE_URL}/token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
+        credentials: 'include',
         body: JSON.stringify({ code })
-      })
+      });
 
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.details || 'Failed to exchange code for token')
+        const error = await response.json();
+        console.error('Token exchange error response:', error);
+        throw new Error(error.message || 'Failed to exchange code for token');
       }
 
-      const data = await response.json()
+      const data = await response.json();
       localStorage.setItem('notionAuth', JSON.stringify({
         accessToken: data.access_token,
         workspaceId: data.workspace_id,
         workspaceName: data.workspace_name,
         workspaceIcon: data.workspace_icon,
         botId: data.bot_id
-      }))
+      }));
       
-      return data
+      return data;
     } catch (error) {
-      console.error('Error exchanging code for token:', error)
-      throw error
+      console.error('Error exchanging code for token:', error);
+      throw error;
     }
   },
 
   getUserInfo: async (accessToken) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/user?access_token=${accessToken}`)
+      console.log('Getting user info from:', `${API_BASE_URL}/user`);
+      const response = await fetch(`${API_BASE_URL}/user?access_token=${accessToken}`, {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
       if (!response.ok) {
-        throw new Error('Failed to get user info')
+        const error = await response.json();
+        console.error('User info error response:', error);
+        throw new Error(error.message || 'Failed to get user info');
       }
-      return response.json()
+      return response.json();
     } catch (error) {
-      console.error('Error getting user info:', error)
-      throw error
+      console.error('Error getting user info:', error);
+      throw error;
     }
   },
 
   getDatabases: async (accessToken) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/databases?access_token=${accessToken}`)
+      console.log('Getting databases from:', `${API_BASE_URL}/databases`);
+      const response = await fetch(`${API_BASE_URL}/databases?access_token=${accessToken}`, {
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
       if (!response.ok) {
-        throw new Error('Failed to get databases')
+        const error = await response.json();
+        console.error('Databases error response:', error);
+        throw new Error(error.message || 'Failed to get databases');
       }
-      return response.json()
+      return response.json();
     } catch (error) {
-      console.error('Error getting databases:', error)
-      throw error
+      console.error('Error getting databases:', error);
+      throw error;
     }
   },
 
   syncNote: async (note, accessToken) => {
     try {
+      console.log('Syncing note to:', `${API_BASE_URL}/sync-note`);
       const response = await fetch(`${API_BASE_URL}/sync-note`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
+        credentials: 'include',
         body: JSON.stringify({ note, access_token: accessToken })
-      })
-
+      });
       if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.details || 'Failed to sync note with Notion')
+        const error = await response.json();
+        console.error('Sync note error response:', error);
+        throw new Error(error.message || 'Failed to sync note');
       }
-
-      const data = await response.json()
-      return {
-        ...data,
-        synced: true,
-        title: data.title || note.title,
-        content: data.content || note.content,
-        createdAt: data.createdAt || note.createdAt,
-        updatedAt: data.updatedAt || note.updatedAt,
-        tags: note.tags
-      }
+      return response.json();
     } catch (error) {
-      console.error('Sync error:', error)
-      return {
-        ...note,
-        syncError: error.message,
-        synced: false
-      }
+      console.error('Error syncing note:', error);
+      throw error;
     }
   },
 
