@@ -22,7 +22,7 @@ services:
     name: notion-notes-frontend
     env: static
     buildCommand: npm install && npm run build
-    staticPublishPath: dist
+    staticPublishPath: ./dist
     envVars:
       - key: VITE_API_URL
         value: https://notion-notes-backend.onrender.com
