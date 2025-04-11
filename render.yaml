@@ -10,9 +10,9 @@ services:
       - key: NODE_ENV
         value: production
       - key: NOTION_CLIENT_ID
-        value: 1d0d872b-594c-80d9-8c01-0037df97a6f4
+        sync: false
       - key: NOTION_CLIENT_SECRET
-        value: secret_AnxeV0qJQoLjNfd1USAgn3nRkxl9BKxGcUP3CDUk1rE
+        sync: false
       - key: REDIRECT_URI
         value: https://thought-base.onrender.com/auth/callback
 
@@ -23,7 +23,7 @@ services:
     startCommand: npm run preview
     envVars:
       - key: VITE_NOTION_CLIENT_ID
-        value: 1d0d872b-594c-80d9-8c01-0037df97a6f4
+        sync: false
       - key: VITE_NOTION_REDIRECT_URI
         value: https://thought-base.onrender.com/auth/callback
       - key: VITE_API_URL
