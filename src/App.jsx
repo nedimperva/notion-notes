@@ -1,6 +1,8 @@
 import React from 'react'
 import { useState, useEffect } from 'react'
 import { Menu, PenLine, Tag, Image, Mic, Upload, MoreVertical, Wifi, WifiOff, ChevronDown, X, Loader2, LogOut, RefreshCw, FileText, BookOpen, PlusCircle, Edit } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { notionOAuth } from './services/notion-oauth'
 import { register, checkForUpdates } from './registerServiceWorker'
 
@@ -105,6 +107,8 @@ export default function App() {
   const [templateFormContent, setTemplateFormContent] = useState('');
   const [isEditingTemplate, setIsEditingTemplate] = useState(false);
   const [editingTemplateIndex, setEditingTemplateIndex] = useState(null);
+  const [showFormattingHelpModal, setShowFormattingHelpModal] = useState(false);
+  const [editorViewMode, setEditorViewMode] = useState('editor');
   
   // Check authentication status on mount
   useEffect(() => {
@@ -750,11 +754,11 @@ export default function App() {
                 )}
               </div>
 
-              {/* Formatting Help Button (Placeholder) */}
+              {/* Formatting Help Button (Now functional) */}
               <button 
                 className="flex-1 bg-gray-100 text-gray-700 py-1.5 px-3 rounded-md hover:bg-gray-200 text-xs font-medium flex items-center justify-center space-x-1.5"
-                title="Formatting help (coming soon)"
-                disabled // Disabled for now
+                title="View Markdown formatting help"
+                onClick={() => setShowFormattingHelpModal(true)}
               >
                 <BookOpen size={14} />
                 <span>Formatting</span>
@@ -913,19 +917,16 @@ export default function App() {
             </div>
           </header>
             
-          {/* Note Content */}
-          {/* flex-grow allows this to take available space, overflow-auto for scrolling */}
-          {/* Adjust padding: p-4 on mobile, p-6 or p-8 on desktop */}
+          {/* Note Content - Updated layout for Editor + Preview */}
           <main className="flex-grow overflow-y-auto p-4 md:p-6 lg:p-8">
-            {/* Card container for the note */}
-            {/* Use min-h-0 on parent flex containers if height issues arise */}
+            {/* Main card container */}
             <div className="max-w-3xl mx-auto bg-white rounded-lg shadow-md p-4 md:p-6 flex flex-col h-full">
+              {/* Note Title Input */}
               <input
                 type="text"
                 value={noteTitle}
                 onChange={(e) => setNoteTitle(e.target.value)}
                 placeholder="Note Title"
-                // Increased font size for better readability, especially on mobile
                 className="w-full text-lg md:text-xl font-medium mb-4 border-b border-gray-300 pb-2 focus:outline-none focus:border-blue-500 bg-transparent"
               />
               
@@ -950,7 +951,7 @@ export default function App() {
                     </button>
                   </div>
                 ))}
-                {/* Add Tag Button Dropdown */}
+                 {/* Add Tag Button Dropdown */}
                 <div className="relative tag-dropdown-container">
                   <button 
                     className="text-gray-500 hover:text-gray-700 text-xs border border-dashed border-gray-300 px-3 py-1.5 rounded-full flex items-center gap-1 hover:border-gray-400 hover:bg-gray-50"
@@ -992,18 +993,66 @@ export default function App() {
                 </div>
               </div>
               
-              {/* Textarea - Use flex-grow to fill space */}
-              {/* Ensure min-h for usability, adjust font size */}
-              <textarea
-                value={noteContent}
-                onChange={(e) => setNoteContent(e.target.value)}
-                placeholder="Start typing your note..."
-                // Added subtle background, padding, and rounded corners
-                className="w-full flex-grow resize-none focus:outline-none text-base leading-relaxed min-h-[200px] md:min-h-[300px] mb-4 bg-gray-50 border border-gray-200 rounded-md p-3 focus:border-blue-400 focus:ring-1 focus:ring-blue-400"
-              />
+              {/* Editor/Preview Toggle Buttons */}
+              <div className="mb-2 border-b border-gray-200">
+                <nav className="-mb-px flex space-x-4" aria-label="Tabs">
+                  <button
+                    onClick={() => setEditorViewMode('editor')}
+                    className={`whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm ${
+                      editorViewMode === 'editor'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    Editor
+                  </button>
+                  <button
+                    onClick={() => setEditorViewMode('preview')}
+                    className={`whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm ${
+                      editorViewMode === 'preview'
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    Preview
+                  </button>
+                </nav>
+              </div>
+
+              {/* Editor & Preview Area - Conditionally Rendered */}
+              {/* Remove grid layout, make container flex-grow */}
+              <div className="flex-grow min-h-[300px]">
+                {/* Editor Column - Render only if mode is 'editor' */}
+                {editorViewMode === 'editor' && (
+                  <div className="flex flex-col h-full">
+                    {/* <label htmlFor="note-editor" className="text-xs font-medium text-gray-500 mb-1 uppercase tracking-wider">Editor (Markdown)</label> */}
+                    <textarea
+                      id="note-editor"
+                      value={noteContent}
+                      onChange={(e) => setNoteContent(e.target.value)}
+                      placeholder="Start typing your note..."
+                      className="w-full flex-grow resize-none focus:outline-none text-base leading-relaxed bg-gray-50 border border-gray-200 rounded-md p-3 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 font-mono h-full"
+                    />
+                  </div>
+                )}
+                
+                {/* Preview Column - Render only if mode is 'preview' */}
+                {editorViewMode === 'preview' && (
+                  <div className="h-full overflow-y-auto border border-gray-200 rounded-md p-3 bg-white">
+                    {/* <label className="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wider">Preview</label> */}
+                    <div className="prose prose-sm max-w-none">
+                      <ReactMarkdown 
+                        remarkPlugins={[remarkGfm]} // Enable GitHub Flavored Markdown
+                      >
+                        {noteContent || "*Preview will appear here...*"}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                )}
+              </div>
               
-              {/* Editor Toolbar (Optional) - adjust spacing/layout */}
-              <div className="border-t border-gray-200 pt-3 mt-auto"> 
+              {/* Editor Toolbar (Optional) - Placed below editor/preview grid */}
+              <div className="border-t border-gray-200 pt-3 mt-4"> 
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex space-x-1"> 
                     {/* Make buttons slightly larger for touch */}
@@ -1127,6 +1176,40 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Formatting Help Modal */}
+      {showFormattingHelpModal && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black bg-opacity-50 transition-opacity duration-300 ease-in-out">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md m-4">
+            <h3 className="text-lg font-medium mb-4 text-gray-800">Markdown Formatting Help</h3>
+            <div className="prose prose-sm max-w-none text-gray-700 space-y-2">
+              <p>Use Markdown to format your notes:</p>
+              <ul>
+                <li><code># Heading 1</code></li>
+                <li><code>## Heading 2</code></li>
+                <li><code>**Bold Text**</code> or <code>__Bold Text__</code></li>
+                <li><code>*Italic Text*</code> or <code>_Italic Text_</code></li>
+                <li><code>- Unordered List Item</code></li>
+                <li><code>1. Ordered List Item</code></li>
+                <li><code>[Link Text](https://example.com)</code></li>
+                <li><code>`Inline Code`</code></li>
+                <li><pre><code>```\\nCode Block\\n```</code></pre></li>
+                <li><code>---</code> for a horizontal rule</li>
+              </ul>
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowFormattingHelpModal(false)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </ErrorBoundary>
   )
 }
