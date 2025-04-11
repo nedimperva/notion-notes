@@ -1,7 +1,8 @@
 import React from 'react'
 import { useState, useEffect } from 'react'
-import { Menu, PenLine, Tag, Image, Mic, Upload, MoreVertical, Wifi, WifiOff, ChevronDown, X, Loader2, LogOut } from 'lucide-react'
+import { Menu, PenLine, Tag, Image, Mic, Upload, MoreVertical, Wifi, WifiOff, ChevronDown, X, Loader2, LogOut, RefreshCw } from 'lucide-react'
 import { notionOAuth } from './services/notion-oauth'
+import { register, checkForUpdates } from './registerServiceWorker'
 
 // Tags from the template structure
 const AVAILABLE_TAGS = [
@@ -131,6 +132,11 @@ export default function App() {
       syncUnsyncedNotes()
     }
   }, [isOnline, notionAuth])
+
+  // Register service worker on mount
+  useEffect(() => {
+    register();
+  }, []);
 
   const handleAddTag = (tag) => {
     if (!selectedTags.some(t => t.name === tag.name)) {
@@ -294,6 +300,10 @@ export default function App() {
     setSelectedTags(selectedOptions);
   };
 
+  const handleCheckForUpdates = () => {
+    checkForUpdates();
+  };
+
   return (
     <ErrorBoundary>
       <div className="flex h-screen bg-gray-50">
@@ -351,6 +361,15 @@ export default function App() {
                 );
               })}
             </div>
+          </div>
+          <div className="p-4 border-t">
+            <button
+              onClick={handleCheckForUpdates}
+              className="flex items-center space-x-2 text-gray-600 hover:text-gray-900"
+            >
+              <RefreshCw className="h-5 w-5" />
+              <span>Check for Updates</span>
+            </button>
           </div>
         </div>
 
