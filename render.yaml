@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: thought-base-backend
+    env: node
+    buildCommand: cd backend && npm install && npm install @notionhq/client express cors axios dotenv
+    startCommand: cd backend && npm start
+    envVars:
+      - key: PORT
+        value: 3001
+      - key: NODE_ENV
+        value: production
+      - key: NOTION_CLIENT_ID
+        sync: false
+      - key: NOTION_CLIENT_SECRET
+        sync: false
+      - key: REDIRECT_URI
+        value: https://thought-base.onrender.com/auth/callback
+
+  - type: web
+    name: thought-base-frontend
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm run preview
+    envVars:
+      - key: VITE_NOTION_CLIENT_ID
+        sync: false
+      - key: VITE_NOTION_REDIRECT_URI
+        value: https://thought-base.onrender.com/auth/callback
+      - key: VITE_API_URL
+        value: https://thought-base-backend.onrender.com 

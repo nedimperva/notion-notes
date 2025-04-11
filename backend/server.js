@@ -12,7 +12,8 @@ app.use(cors({
   origin: [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
-    'http://192.168.1.12:5173' // Replace with your computer's local IP
+    'http://192.168.1.100:5173',
+    'https://thought-base.onrender.com' // Add your Render frontend URL here
   ],
   credentials: true
 }));
