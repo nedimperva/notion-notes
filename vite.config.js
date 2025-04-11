@@ -92,5 +92,20 @@ export default defineConfig({
   preview: {
     host: '0.0.0.0',
     port: 5173
+  },
+  build: {
+    cssCodeSplit: true,
+    sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom'],
+          'ui-vendor': ['lucide-react'],
+        },
+      },
+    },
+  },
+  css: {
+    postcss: './postcss.config.cjs',
   }
 })
