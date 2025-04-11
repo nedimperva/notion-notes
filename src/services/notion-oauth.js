@@ -5,7 +5,7 @@ const getApiBaseUrl = () => {
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     if (isMobile) {
       // Use the local IP address of the computer running the backend
-      return 'http://192.168.1.100:3001/api/notion'; // Replace with your computer's local IP
+      return 'http://192.168.1.12:3001/api/notion'; // Replace with your computer's local IP
     }
     // For desktop, use localhost
     return 'http://localhost:3001/api/notion';
