@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: notion-notes-backend
+    name: thought-base-backend
     env: node
     buildCommand: npm install
     startCommand: node server.js
@@ -14,20 +14,20 @@ services:
       - key: PORT
         value: 3000
       - key: FRONTEND_URL
-        value: https://notion-notes.onrender.com
+        value: https://thought-base.onrender.com
     healthCheckPath: /health
     autoDeploy: true
 
   - type: static
-    name: notion-notes-frontend
+    name: thought-base-frontend
     env: static
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
     envVars:
       - key: VITE_API_URL
-        value: https://notion-notes-backend.onrender.com
+        value: https://thought-base-backend.onrender.com
       - key: VITE_NOTION_CLIENT_ID
         sync: false
       - key: VITE_NOTION_REDIRECT_URI
-        value: https://notion-notes.onrender.com
+        value: https://thought-base.onrender.com
     autoDeploy: true 

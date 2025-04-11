@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
+@layer base {
+  html {
+    @apply h-full;
+  }
+  body {
+    @apply h-full m-0 bg-gray-50 dark:bg-gray-900;
+  }
+  #root {
+    @apply h-full;
+  }
 }
