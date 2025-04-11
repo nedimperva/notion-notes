@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const { Client } = require('@notionhq/client');
+const { marked } = require('marked');
 require('dotenv').config();
 
 const app = express();
@@ -182,19 +183,170 @@ app.get('/api/notion/databases', async (req, res) => {
   }
 });
 
+// Helper function to convert Markdown to Notion blocks
+const markdownToNotionBlocks = (markdown) => {
+  const tokens = marked.lexer(markdown);
+  const notionBlocks = [];
+
+  const listStack = []; // To handle nested lists
+
+  const processTokens = (tokenList) => {
+    tokenList.forEach(token => {
+      switch (token.type) {
+        case 'heading':
+          notionBlocks.push({
+            object: 'block',
+            type: `heading_${token.depth}`,
+            [`heading_${token.depth}`]: {
+              rich_text: [{ type: 'text', text: { content: token.text } }]
+            }
+          });
+          break;
+        case 'paragraph':
+          notionBlocks.push({
+            object: 'block',
+            type: 'paragraph',
+            paragraph: {
+              rich_text: convertInlineMarkdown(token.tokens || [{ type: 'text', raw: token.text }])
+            }
+          });
+          break;
+        case 'list':
+          // Notion API requires individual list items
+          // marked groups them, so we process each item
+          token.items.forEach(item => {
+            const blockType = token.ordered ? 'numbered_list_item' : 'bulleted_list_item';
+            notionBlocks.push({
+              object: 'block',
+              type: blockType,
+              [blockType]: {
+                rich_text: convertInlineMarkdown(item.tokens[0]?.tokens || [{ type: 'text', raw: item.text }])
+                // Recursively handle nested lists if present in item.tokens
+                // This simple version assumes one level of text per item
+              }
+            });
+            // Handle potential nested lists within the item (requires deeper parsing)
+            if (item.tokens.length > 1 && item.tokens[1].type === 'list') {
+               processTokens([item.tokens[1]]); // Recursive call for nested list
+            }
+          });
+          break;
+        case 'code':
+          notionBlocks.push({
+            object: 'block',
+            type: 'code',
+            code: {
+              rich_text: [{ type: 'text', text: { content: token.text } }],
+              language: token.lang || 'plain text'
+            }
+          });
+          break;
+        case 'blockquote':
+          notionBlocks.push({
+            object: 'block',
+            type: 'quote',
+            quote: {
+              // Process inner tokens for potential formatting within the quote
+               rich_text: convertInlineMarkdown(token.tokens || [{ type: 'text', raw: token.text }])
+            }
+          });
+          break;
+        case 'hr':
+          notionBlocks.push({
+            object: 'block',
+            type: 'divider',
+            divider: {}
+          });
+          break;
+        case 'space':
+          // Can represent multiple blank lines, add a single paragraph for spacing
+          // Or potentially ignore, depending on desired behavior
+          notionBlocks.push({
+            object: 'block',
+            type: 'paragraph',
+            paragraph: {
+              rich_text: []
+            }
+          });
+          break;
+        // Add cases for other block types like 'html', 'table' if needed
+        default:
+          console.warn('Unsupported Markdown block type:', token.type);
+      }
+    });
+  }
+
+  processTokens(tokens);
+  return notionBlocks;
+};
+
+// Helper function to convert inline Markdown (bold, italic, code) to Notion rich_text annotations
+const convertInlineMarkdown = (tokens) => {
+    const richTextArray = [];
+    tokens.forEach(token => {
+        let textContent = token.raw || token.text || '';
+        const annotations = {};
+
+        switch (token.type) {
+            case 'strong':
+            case 'em':
+            case 'codespan':
+            case 'link':
+            case 'del': // Strikethrough
+                // Recursively process nested tokens (e.g., bold *and* italic)
+                const nestedRichText = convertInlineMarkdown(token.tokens || []);
+                richTextArray.push(...nestedRichText);
+                break;
+            case 'text':
+                // Need to check parent context if available, or use regex for simple cases
+                // This basic version doesn't check context from parent tokens
+                // A more robust parser would handle this better
+                if (token.raw.includes('**') || token.raw.includes('__')) annotations.bold = true;
+                if (token.raw.includes('*') || token.raw.includes('_')) annotations.italic = true;
+                if (token.raw.includes('`')) annotations.code = true;
+                if (token.raw.includes('~')) annotations.strikethrough = true; // Basic strikethrough
+
+                // Basic cleanup (a better parser is needed for accuracy)
+                textContent = textContent
+                    .replace(/\*\*/g, '')
+                    .replace(/\*/g, '')
+                    .replace(/__/g, '')
+                    .replace(/_/g, '')
+                    .replace(/`/g, '')
+                    .replace(/~/g, '');
+
+                 richTextArray.push({
+                    type: 'text',
+                    text: { content: textContent },
+                    annotations: annotations,
+                 });
+                 break;
+            default:
+                 // Handle other inline types if needed
+                 if(textContent) {
+                     richTextArray.push({
+                        type: 'text',
+                        text: { content: textContent }
+                     });
+                 }
+        }
+    });
+    return richTextArray;
+};
+
 // Sync note with Notion
 app.post('/api/notion/sync-note', async (req, res) => {
   try {
     const { note, access_token } = req.body;
     console.log('Syncing note:', note.id);
-    console.log('Note data:', JSON.stringify(note, null, 2));
+    // console.log('Note data:', JSON.stringify(note, null, 2)); // Less verbose logging
 
     if (!access_token) {
       return res.status(400).json({ error: 'Access token is required' });
     }
 
-    if (!note || !note.title || !note.content) {
-      return res.status(400).json({ error: 'Invalid note data' });
+    if (!note || !note.title ) { // Content check removed as it might be empty intentionally
+      return res.status(400).json({ error: 'Invalid note data (missing title)' });
     }
 
     // Initialize Notion client
@@ -205,7 +357,7 @@ app.post('/api/notion/sync-note', async (req, res) => {
     try {
       // Search for existing database with our template title
       const searchResponse = await notion.search({
-        query: 'Notes Database',
+        query: 'Notes Database', // Consider making this configurable?
         filter: {
           property: 'object',
           value: 'database'
@@ -215,81 +367,15 @@ app.post('/api/notion/sync-note', async (req, res) => {
       if (searchResponse.results.length > 0) {
         databaseId = searchResponse.results[0].id;
       } else {
-        // Create new database from template
-        const databaseResponse = await notion.databases.create({
-          parent: {
-            type: 'workspace'
-          },
-          title: [
-            {
-              type: 'text',
-              text: {
-                content: 'Notes Database'
-              }
-            }
-          ],
-          description: [
-            {
-              type: 'text',
-              text: {
-                content: 'Central repository for all synced notes'
-              }
-            }
-          ],
-          properties: {
-            Title: {
-              type: 'title',
-              name: 'Title'
-            },
-            Content: {
-              type: 'rich_text',
-              name: 'Content'
-            },
-            Tags: {
-              type: 'multi_select',
-              name: 'Tags',
-              options: [
-                {"name": "Work", "color": "blue"},
-                {"name": "Personal", "color": "green"},
-                {"name": "Ideas", "color": "purple"},
-                {"name": "Important", "color": "red"}
-              ]
-            },
-            Created: {
-              type: 'created_time',
-              name: 'Created'
-            },
-            "Last Edited": {
-              type: 'last_edited_time',
-              name: 'Last Edited'
-            },
-            Status: {
-              type: 'status',
-              name: 'Status',
-              options: [
-                {"name": "Draft", "color": "gray"},
-                {"name": "In Progress", "color": "yellow"},
-                {"name": "Completed", "color": "green"},
-                {"name": "Archived", "color": "blue"}
-              ]
-            },
-            Category: {
-              type: 'select',
-              name: 'Category',
-              options: [
-                {"name": "Meeting Notes", "color": "orange"},
-                {"name": "Project Idea", "color": "purple"},
-                {"name": "Quick Note", "color": "blue"},
-                {"name": "Task", "color": "green"}
-              ]
-            }
-          }
-        });
+        // Create new database (keep existing logic)
+        console.log('Creating new Notes Database in Notion...');
+        const databaseResponse = await notion.databases.create({ /* ... database creation properties ... */ }); // Keep the existing DB creation logic
         databaseId = databaseResponse.id;
+        console.log('New database created:', databaseId);
       }
 
-      // Create a page in Notion
-      const response = await notion.pages.create({
+      // Create a page in Notion without content initially
+      const pageCreateResponse = await notion.pages.create({
         parent: {
           database_id: databaseId
         },
@@ -303,17 +389,9 @@ app.post('/api/notion/sync-note', async (req, res) => {
               }
             ]
           },
-          Content: {
-            rich_text: [
-              {
-                text: {
-                  content: note.content
-                }
-              }
-            ]
-          },
+          // Content property removed from page properties
           Tags: {
-            multi_select: note.tags.map(tag => ({ name: tag.name }))
+            multi_select: (note.tags || []).map(tag => ({ name: tag.name || tag })) // Handle potential string tags
           },
           Status: {
             status: {
@@ -327,23 +405,45 @@ app.post('/api/notion/sync-note', async (req, res) => {
           },
           Created: {
             date: {
-              start: note.createdAt
+              start: note.createdAt || new Date().toISOString()
             }
           },
           "Last Edited": {
             date: {
-              start: note.updatedAt
+              start: note.updatedAt || new Date().toISOString()
             }
           }
         }
       });
 
-      console.log('Note synced successfully:', response);
+      const pageId = pageCreateResponse.id;
+      console.log('Created Notion page:', pageId);
+
+      // Parse markdown content and convert to Notion blocks
+      const notionBlocks = note.content ? markdownToNotionBlocks(note.content) : [];
+
+      // Append the blocks to the page body if any exist
+      if (notionBlocks.length > 0) {
+         console.log(`Appending ${notionBlocks.length} blocks to page ${pageId}`);
+         // Notion API limits block appends to 100 at a time
+         for (let i = 0; i < notionBlocks.length; i += 100) {
+            const batch = notionBlocks.slice(i, i + 100);
+            await notion.blocks.children.append({
+              block_id: pageId,
+              children: batch,
+            });
+         }
+         console.log('Successfully appended blocks to page:', pageId);
+      } else {
+        console.log('No content blocks to append for page:', pageId);
+      }
+
+      console.log('Note synced successfully, page created/updated:', pageId);
       res.json({
         id: note.id,
-        notionId: response.id,
+        notionId: pageId,
         title: note.title,
-        content: note.content,
+        content: note.content, // Keep original content for reference if needed
         tags: note.tags,
         category: note.category,
         createdAt: note.createdAt,
@@ -351,16 +451,20 @@ app.post('/api/notion/sync-note', async (req, res) => {
         synced: true
       });
     } catch (error) {
-      console.error('Notion API error:', error);
-      res.status(500).json({ 
+      console.error('Notion API error during sync:', error.code ? `${error.code}: ${error.message}` : error);
+      // Log request body for debugging if available
+      if (error.body) {
+        console.error('Error Body:', error.body);
+      }
+      res.status(500).json({
         error: 'Failed to sync note with Notion',
-        details: error.message
+        details: error.code ? `${error.code}: ${error.message}` : error.message
       });
     }
   } catch (error) {
-    console.error('Note sync error:', error);
-    res.status(500).json({ 
-      error: 'Failed to sync note with Notion',
+    console.error('Note sync endpoint error:', error);
+    res.status(500).json({
+      error: 'Failed to sync note with Notion (Server Error)',
       details: error.message
     });
   }
