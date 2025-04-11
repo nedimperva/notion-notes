@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
+const { Client } = require('@notionhq/client');
 require('dotenv').config();
 
 const app = express();
@@ -48,51 +49,61 @@ app.post('/api/notion/token', async (req, res) => {
   try {
     const { code } = req.body;
     console.log('Received code:', code);
-    console.log('Using Client ID:', NOTION_CLIENT_ID);
-    console.log('Using Redirect URI:', REDIRECT_URI);
 
     if (!code) {
-      return res.status(400).json({ error: 'Authorization code is required' });
-    }
-
-    const authHeader = `Basic ${Buffer.from(`${NOTION_CLIENT_ID}:${NOTION_CLIENT_SECRET}`).toString('base64')}`;
-    console.log('Auth header:', authHeader.substring(0, 20) + '...');
-
-    const response = await axios.post('https://api.notion.com/v1/oauth/token', {
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: REDIRECT_URI
-    }, {
-      headers: {
-        'Authorization': authHeader,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    console.log('Token exchange successful');
-    res.json(response.data);
-  } catch (error) {
-    console.error('Token exchange error:', {
-      message: error.message,
-      response: error.response?.data,
-      status: error.response?.status,
-      headers: error.response?.headers
-    });
-
-    // Handle specific error cases
-    if (error.response?.data?.error === 'invalid_grant') {
       return res.status(400).json({ 
-        error: 'Invalid authorization code',
-        details: 'The authorization code has already been used or has expired. Please try authenticating again.',
-        suggestion: 'Click the "Connect to Notion" button to start a new authentication flow.'
+        error: 'Authorization code is required',
+        details: 'No authorization code was provided in the request'
       });
     }
 
-    // Return more detailed error information
-    res.status(error.response?.status || 500).json({ 
+    const authHeader = `Basic ${Buffer.from(`${NOTION_CLIENT_ID}:${NOTION_CLIENT_SECRET}`).toString('base64')}`;
+
+    try {
+      const response = await axios.post('https://api.notion.com/v1/oauth/token', {
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: REDIRECT_URI
+      }, {
+        headers: {
+          'Authorization': authHeader,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      console.log('Token exchange successful');
+      res.json(response.data);
+    } catch (error) {
+      console.error('Notion API error:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+
+      if (error.response?.data?.error === 'invalid_grant') {
+        return res.status(400).json({ 
+          error: 'Invalid authorization code',
+          details: 'The authorization code has already been used or has expired. Please try authenticating again.',
+          suggestion: 'Click the "Connect to Notion" button to start a new authentication flow.'
+        });
+      }
+
+      if (error.response?.status === 400) {
+        return res.status(400).json({ 
+          error: 'Invalid request',
+          details: error.response?.data?.message || 'The request to Notion was invalid',
+          suggestion: 'Please check your integration settings and try again.'
+        });
+      }
+
+      throw error;
+    }
+  } catch (error) {
+    console.error('Token exchange error:', error);
+    res.status(500).json({ 
       error: 'Failed to exchange code for token',
-      details: error.response?.data || error.message,
-      suggestion: 'Please check your Notion integration settings and try again.'
+      details: error.message,
+      suggestion: 'Please try again later or contact support if the problem persists.'
     });
   }
 });
@@ -165,7 +176,6 @@ app.post('/api/notion/sync-note', async (req, res) => {
     const { note, access_token } = req.body;
     console.log('Syncing note:', note.id);
     console.log('Note data:', JSON.stringify(note, null, 2));
-    console.log('Database ID:', process.env.NOTION_DATABASE_ID);
 
     if (!access_token) {
       return res.status(400).json({ error: 'Access token is required' });
@@ -175,25 +185,101 @@ app.post('/api/notion/sync-note', async (req, res) => {
       return res.status(400).json({ error: 'Invalid note data' });
     }
 
-    if (!process.env.NOTION_DATABASE_ID) {
-      return res.status(500).json({ error: 'Database ID is not configured' });
-    }
+    // Initialize Notion client
+    const notion = new Client({ auth: access_token });
 
-    // First, let's verify the database exists and get its properties
+    // Get or create database
+    let databaseId;
     try {
-      const databaseResponse = await axios.get(`https://api.notion.com/v1/databases/${process.env.NOTION_DATABASE_ID}`, {
-        headers: {
-          'Authorization': `Bearer ${access_token}`,
-          'Notion-Version': '2022-06-28'
+      // Search for existing database with our template title
+      const searchResponse = await notion.search({
+        query: 'Notes Database',
+        filter: {
+          property: 'object',
+          value: 'database'
         }
       });
 
-      console.log('Database properties:', JSON.stringify(databaseResponse.data.properties, null, 2));
+      if (searchResponse.results.length > 0) {
+        databaseId = searchResponse.results[0].id;
+      } else {
+        // Create new database from template
+        const databaseResponse = await notion.databases.create({
+          parent: {
+            type: 'workspace'
+          },
+          title: [
+            {
+              type: 'text',
+              text: {
+                content: 'Notes Database'
+              }
+            }
+          ],
+          description: [
+            {
+              type: 'text',
+              text: {
+                content: 'Central repository for all synced notes'
+              }
+            }
+          ],
+          properties: {
+            Title: {
+              type: 'title',
+              name: 'Title'
+            },
+            Content: {
+              type: 'rich_text',
+              name: 'Content'
+            },
+            Tags: {
+              type: 'multi_select',
+              name: 'Tags',
+              options: [
+                {"name": "Work", "color": "blue"},
+                {"name": "Personal", "color": "green"},
+                {"name": "Ideas", "color": "purple"},
+                {"name": "Important", "color": "red"}
+              ]
+            },
+            Created: {
+              type: 'created_time',
+              name: 'Created'
+            },
+            "Last Edited": {
+              type: 'last_edited_time',
+              name: 'Last Edited'
+            },
+            Status: {
+              type: 'status',
+              name: 'Status',
+              options: [
+                {"name": "Draft", "color": "gray"},
+                {"name": "In Progress", "color": "yellow"},
+                {"name": "Completed", "color": "green"},
+                {"name": "Archived", "color": "blue"}
+              ]
+            },
+            Category: {
+              type: 'select',
+              name: 'Category',
+              options: [
+                {"name": "Meeting Notes", "color": "orange"},
+                {"name": "Project Idea", "color": "purple"},
+                {"name": "Quick Note", "color": "blue"},
+                {"name": "Task", "color": "green"}
+              ]
+            }
+          }
+        });
+        databaseId = databaseResponse.id;
+      }
 
       // Create a page in Notion
-      const response = await axios.post('https://api.notion.com/v1/pages', {
+      const response = await notion.pages.create({
         parent: {
-          database_id: process.env.NOTION_DATABASE_ID
+          database_id: databaseId
         },
         properties: {
           Title: {
@@ -215,48 +301,16 @@ app.post('/api/notion/sync-note', async (req, res) => {
             ]
           },
           Tags: {
-            multi_select: note.tags
-              .filter(tag => {
-                console.log('Processing tag:', tag.name);
-                // Check if the tag exists in the Tags options
-                const tagOption = databaseResponse.data.properties.Tags.multi_select.options.find(
-                  option => option.name.toLowerCase() === tag.name.toLowerCase()
-                );
-                console.log('Matched tag option:', tagOption);
-                return tagOption !== undefined;
-              })
-              .map(tag => {
-                const tagOption = databaseResponse.data.properties.Tags.multi_select.options.find(
-                  option => option.name.toLowerCase() === tag.name.toLowerCase()
-                );
-                return {
-                  id: tagOption.id,
-                  name: tag.name
-                };
-              })
-          },
-          Category: {
-            select: note.tags
-              .filter(tag => {
-                // Check if the tag exists in the Category options
-                const categoryOption = databaseResponse.data.properties.Category.select.options.find(
-                  option => option.name.toLowerCase() === tag.name.toLowerCase()
-                );
-                return categoryOption !== undefined;
-              })
-              .map(tag => {
-                const categoryOption = databaseResponse.data.properties.Category.select.options.find(
-                  option => option.name.toLowerCase() === tag.name.toLowerCase()
-                );
-                return {
-                  id: categoryOption.id,
-                  name: tag.name
-                };
-              })[0] || { name: "Quick Note" } // Default to "Quick Note" if no matching category
+            multi_select: note.tags.map(tag => ({ name: tag.name }))
           },
           Status: {
             status: {
               name: "Draft"
+            }
+          },
+          Category: {
+            select: {
+              name: note.category || "Quick Note"
             }
           },
           Created: {
@@ -270,54 +324,32 @@ app.post('/api/notion/sync-note', async (req, res) => {
             }
           }
         }
-      }, {
-        headers: {
-          'Authorization': `Bearer ${access_token}`,
-          'Notion-Version': '2022-06-28',
-          'Content-Type': 'application/json'
-        }
       });
 
-      console.log('Note synced successfully:', response.data);
+      console.log('Note synced successfully:', response);
       res.json({
         id: note.id,
-        notionId: response.data.id,
+        notionId: response.id,
         title: note.title,
         content: note.content,
         tags: note.tags,
+        category: note.category,
         createdAt: note.createdAt,
         updatedAt: note.updatedAt,
         synced: true
       });
     } catch (error) {
-      console.error('Notion API error:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-        headers: error.response?.headers
+      console.error('Notion API error:', error);
+      res.status(500).json({ 
+        error: 'Failed to sync note with Notion',
+        details: error.message
       });
-      
-      if (error.response?.status === 404) {
-        return res.status(404).json({ 
-          error: 'Database not found',
-          details: 'The specified database ID does not exist or you do not have access to it'
-        });
-      }
-      
-      throw error; // Re-throw to be caught by outer try-catch
     }
   } catch (error) {
-    console.error('Note sync error:', {
-      message: error.message,
-      response: error.response?.data,
-      status: error.response?.status,
-      headers: error.response?.headers
-    });
-    
+    console.error('Note sync error:', error);
     res.status(500).json({ 
       error: 'Failed to sync note with Notion',
-      details: error.response?.data || error.message,
-      suggestion: 'Please check your database ID and permissions.'
+      details: error.message
     });
   }
 });

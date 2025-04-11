@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { notionOAuth } from '../services/notion-oauth'
 
@@ -6,9 +6,16 @@ export default function AuthCallback() {
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
+  const hasAttemptedExchange = useRef(false)
 
   useEffect(() => {
     const handleCallback = async () => {
+      // Prevent multiple exchange attempts
+      if (hasAttemptedExchange.current) {
+        return
+      }
+      hasAttemptedExchange.current = true
+
       try {
         const urlParams = new URLSearchParams(window.location.search)
         const code = urlParams.get('code')
@@ -22,6 +29,14 @@ export default function AuthCallback() {
           throw new Error('No authorization code received')
         }
 
+        // Check if we already have auth data
+        const existingAuth = notionOAuth.getNotionAuth()
+        if (existingAuth) {
+          console.log('Already authenticated, redirecting...')
+          navigate('/')
+          return
+        }
+
         console.log('Exchanging code for token...')
         const tokenData = await notionOAuth.exchangeCodeForToken(code)
         console.log('Token received:', tokenData)
@@ -31,6 +46,8 @@ export default function AuthCallback() {
       } catch (err) {
         console.error('Auth callback error:', err)
         setError(err.message)
+        // Clear any existing auth data on error
+        notionOAuth.clearNotionAuth()
       } finally {
         setLoading(false)
       }

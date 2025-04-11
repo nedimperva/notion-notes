@@ -196,57 +196,68 @@ export default function App() {
   }
 
   const handleSaveNote = async () => {
-    if (!noteTitle.trim() || !noteContent.trim()) return
-
-    const newNote = {
-      id: currentNoteId || Date.now(),
-      title: noteTitle.trim(),
-      content: noteContent.trim(),
-      tags: selectedTags,
-      createdAt: currentNoteId ? notes.find(n => n.id === currentNoteId)?.createdAt : new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      synced: false
+    if (!notionAuth) {
+      setConnectionError('Please connect to Notion first');
+      return;
     }
 
-    let updatedNotes
-    if (currentNoteId) {
-      updatedNotes = notes.map(note => 
-        note.id === currentNoteId ? newNote : note
-      )
-    } else {
-      updatedNotes = [...notes, newNote]
-    }
+    try {
+      setIsSyncing(true);
+      const newNote = {
+        id: currentNoteId || Date.now().toString(),
+        title: noteTitle,
+        content: noteContent,
+        tags: selectedTags,
+        category: selectedCategory,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
 
-    setNotes(updatedNotes)
-    localStorage.setItem('notes', JSON.stringify(updatedNotes))
-
-    // Reset form
-    setNoteTitle("")
-    setNoteContent("")
-    setSelectedTags([])
-    setCurrentNoteId(null)
-
-    // Try to sync immediately if online and authenticated
-    if (isOnline && notionAuth) {
-      setIsSyncing(true)
-      try {
-        const syncedNote = await notionOAuth.syncNote(newNote, notionAuth.accessToken)
-        if (syncedNote && syncedNote.id) {
-          // Remove the synced note from the local state
-          setNotes(prev => prev.filter(note => note.id !== newNote.id))
-          
-          // Update localStorage
-          const currentNotes = JSON.parse(localStorage.getItem('notes') || '[]')
-          const filteredNotes = currentNotes.filter(note => note.id !== newNote.id)
-          localStorage.setItem('notes', JSON.stringify(filteredNotes))
-        }
-      } catch (error) {
-        console.error('Sync error:', error)
-      } finally {
-        setIsSyncing(false)
+      const syncedNote = await notionOAuth.syncNote(newNote, notionAuth.accessToken);
+      
+      if (syncedNote.synced) {
+        // Remove the synced note from local storage and state
+        setNotes(prevNotes => {
+          const updatedNotes = prevNotes.filter(note => note.id !== newNote.id);
+          localStorage.setItem('notes', JSON.stringify(updatedNotes));
+          return updatedNotes;
+        });
+        
+        // Reset form
+        setNoteTitle('');
+        setNoteContent('');
+        setSelectedTags([]);
+        setSelectedCategory('');
+        setCurrentNoteId(null);
+      } else {
+        // If sync failed, keep the note in local storage
+        setNotes(prevNotes => {
+          const existingNoteIndex = prevNotes.findIndex(n => n.id === newNote.id);
+          if (existingNoteIndex >= 0) {
+            const updatedNotes = [...prevNotes];
+            updatedNotes[existingNoteIndex] = { ...newNote, synced: false, syncError: syncedNote.syncError };
+            localStorage.setItem('notes', JSON.stringify(updatedNotes));
+            return updatedNotes;
+          }
+          const updatedNotes = [...prevNotes, { ...newNote, synced: false, syncError: syncedNote.syncError }];
+          localStorage.setItem('notes', JSON.stringify(updatedNotes));
+          return updatedNotes;
+        });
+        setConnectionError(syncedNote.syncError || 'Failed to sync note with Notion');
       }
+    } catch (error) {
+      console.error('Error saving note:', error);
+      setConnectionError(error.message);
+      // Keep the note in local storage if sync failed
+      setNotes(prevNotes => {
+        const updatedNotes = [...prevNotes, { ...newNote, synced: false, syncError: error.message }];
+        localStorage.setItem('notes', JSON.stringify(updatedNotes));
+        return updatedNotes;
+      });
+    } finally {
+      setIsSyncing(false);
     }
-  }
+  };
 
   const handleSelectNote = (note) => {
     setCurrentNoteId(note.id)

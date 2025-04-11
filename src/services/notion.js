@@ -1,4 +1,5 @@
 import { Client } from '@notionhq/client'
+import templateStructure from '../notion-template-structure.json'
 
 class NotionService {
   constructor() {
@@ -6,9 +7,40 @@ class NotionService {
     this.databaseId = null
   }
 
-  initialize(apiKey, databaseId) {
+  async initialize(apiKey) {
     this.client = new Client({ auth: apiKey })
-    this.databaseId = databaseId
+    
+    // Create a new database using the template structure
+    try {
+      const response = await this.client.databases.create({
+        parent: {
+          type: 'workspace'
+        },
+        title: [
+          {
+            type: 'text',
+            text: {
+              content: templateStructure.database.title
+            }
+          }
+        ],
+        description: [
+          {
+            type: 'text',
+            text: {
+              content: templateStructure.database.description
+            }
+          }
+        ],
+        properties: templateStructure.database.properties
+      })
+      
+      this.databaseId = response.id
+      return response
+    } catch (error) {
+      console.error('Error creating database from template:', error)
+      throw error
+    }
   }
 
   async syncNote(note) {
