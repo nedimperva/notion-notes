@@ -24,10 +24,10 @@ app.use(express.json());
 // Verify environment variables
 const NOTION_CLIENT_ID = process.env.NOTION_CLIENT_ID;
 const NOTION_CLIENT_SECRET = process.env.NOTION_CLIENT_SECRET;
-const REDIRECT_URI = process.env.FRONTEND_URL + '/auth/callback';
+const REDIRECT_URI = process.env.REDIRECT_URI;
 
-if (!NOTION_CLIENT_ID || !NOTION_CLIENT_SECRET) {
-  console.error('Missing required environment variables: NOTION_CLIENT_ID or NOTION_CLIENT_SECRET');
+if (!NOTION_CLIENT_ID || !NOTION_CLIENT_SECRET || !REDIRECT_URI) {
+  console.error('Missing required environment variables: NOTION_CLIENT_ID, NOTION_CLIENT_SECRET, or REDIRECT_URI');
   process.exit(1);
 }
 
