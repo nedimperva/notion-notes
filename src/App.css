@@ -1,9 +1,12 @@
 #root {
   width: 100%;
   min-height: 100vh;
+  /* Ensure background color applies if needed, though Tailwind's bg-gray-50 on body/main div might be sufficient */
+  /* background-color: #f9fafb; */ 
 }
 
-/* Remove default Vite styles */
+/* Remove default Vite styles if they weren't already gone */
+/* 
 .logo, .card, .read-the-docs {
   display: none;
 }
@@ -43,3 +46,44 @@
 .read-the-docs {
   color: #888;
 }
+*/
+
+/* Keep this if smooth scrolling is desired on touch devices, 
+   Tailwind might not have a direct equivalent for -webkit-overflow-scrolling */
+.overflow-y-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Remove custom mobile styles added previously as Tailwind handles responsiveness now */
+/* 
+button, a, input, select {
+  min-height: 44px; 
+}
+
+input, textarea, select {
+  font-size: 16px; 
+  padding: 12px;
+  border-radius: 8px;
+}
+
+@media (max-width: 768px) {
+  .p-4 {
+    padding: 1rem;
+  }
+  
+  .space-y-2 > * + * {
+    margin-top: 0.75rem;
+  }
+  
+  .gap-1 {
+    gap: 0.5rem;
+  }
+  .mobile-menu {
+    ...
+  }
+  h1 { ... } h2 { ... } p { ... }
+}
+
+.btn { ... }
+.icon-btn { ... }
+*/
