@@ -25,11 +25,14 @@ app.use(express.json());
 // Verify environment variables
 const NOTION_CLIENT_ID = process.env.NOTION_CLIENT_ID;
 const NOTION_CLIENT_SECRET = process.env.NOTION_CLIENT_SECRET;
-const REDIRECT_URI = process.env.REDIRECT_URI;
+const REDIRECT_URI = process.env.REDIRECT_URI; // Production URI
+const DEV_REDIRECT_URI = process.env.DEV_REDIRECT_URI; // Development URI
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
-if (!NOTION_CLIENT_ID || !NOTION_CLIENT_SECRET || !REDIRECT_URI) {
-  console.error('Missing required environment variables: NOTION_CLIENT_ID, NOTION_CLIENT_SECRET, or REDIRECT_URI');
-  process.exit(1);
+if (!NOTION_CLIENT_ID || !NOTION_CLIENT_SECRET || !REDIRECT_URI || !DEV_REDIRECT_URI) {
+  console.warn('Missing required environment variables: NOTION_CLIENT_ID, NOTION_CLIENT_SECRET, REDIRECT_URI, or DEV_REDIRECT_URI');
+  // Decide if you want to exit(1) in dev if DEV_REDIRECT_URI is missing
+  // process.exit(1);
 }
 
 // Health check endpoint
@@ -40,11 +43,15 @@ app.get('/health', (req, res) => {
 // Get the OAuth URL
 app.get('/api/notion/auth-url', (req, res) => {
   try {
+    // Select redirect URI based on environment
+    const redirectUriToUse = IS_PRODUCTION ? REDIRECT_URI : DEV_REDIRECT_URI;
+    console.log(`Using redirect URI for ${IS_PRODUCTION ? 'Production' : 'Development'}: ${redirectUriToUse}`);
+
     const params = new URLSearchParams({
       client_id: NOTION_CLIENT_ID,
       response_type: 'code',
       owner: 'user',
-      redirect_uri: REDIRECT_URI
+      redirect_uri: redirectUriToUse // Use the selected URI
     });
 
     const authUrl = `https://api.notion.com/v1/oauth/authorize?${params.toString()}`;
@@ -73,10 +80,14 @@ app.post('/api/notion/token', async (req, res) => {
     const authHeader = `Basic ${Buffer.from(`${NOTION_CLIENT_ID}:${NOTION_CLIENT_SECRET}`).toString('base64')}`;
 
     try {
+      // Select redirect URI based on environment (must match the one used for auth URL)
+      const redirectUriToUse = IS_PRODUCTION ? REDIRECT_URI : DEV_REDIRECT_URI;
+      console.log(`Using redirect URI for token exchange (${IS_PRODUCTION ? 'Production' : 'Development'}): ${redirectUriToUse}`);
+      
       const response = await axios.post('https://api.notion.com/v1/oauth/token', {
         grant_type: 'authorization_code',
         code,
-        redirect_uri: REDIRECT_URI
+        redirect_uri: redirectUriToUse // Use the selected URI
       }, {
         headers: {
           'Authorization': authHeader,

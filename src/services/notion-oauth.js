@@ -1,13 +1,17 @@
 // Get the API base URL based on the environment
 const getApiBaseUrl = () => {
   if (import.meta.env.DEV) {
-    // Check if we're accessing from a mobile device
+    // Simpler: Always use localhost for dev, regardless of user agent
+    // If you need mobile testing later, you might need a different setup (e.g., exposing via local IP)
+    /* 
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     if (isMobile) {
       // Use the local IP address of the computer running the backend
-      return 'http://192.168.1.12:3001/api/notion'; // Replace with your computer's local IP
+      // Make sure this IP is correct for your network!
+      return 'http://192.168.1.12:3001/api/notion'; 
     }
-    // For desktop, use localhost
+    */
+    // For desktop/all dev, use localhost
     return 'http://localhost:3001/api/notion';
   }
   // In production, use the environment variable

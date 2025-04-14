@@ -1,6 +1,5 @@
-import React from 'react'
-import { useState, useEffect } from 'react'
-import { Menu, PenLine, Tag, Image, Mic, Upload, MoreVertical, Wifi, WifiOff, ChevronDown, X, Loader2, LogOut, RefreshCw, FileText, BookOpen, PlusCircle, Edit } from 'lucide-react'
+import React, { useState, useEffect, useRef } from 'react'
+import { Menu, PenLine, Tag, Image, Mic, Upload, MoreVertical, Wifi, WifiOff, ChevronDown, X, Loader2, LogOut, RefreshCw, FileText, BookOpen, PlusCircle, Edit, Settings, Eye, Code } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { notionOAuth } from './services/notion-oauth'
@@ -109,16 +108,38 @@ export default function App() {
   const [editingTemplateIndex, setEditingTemplateIndex] = useState(null);
   const [showFormattingHelpModal, setShowFormattingHelpModal] = useState(false);
   const [editorViewMode, setEditorViewMode] = useState('editor');
+  const [showMoreOptionsDropdown, setShowMoreOptionsDropdown] = useState(false);
+  // Theme and Font State
+  const [theme, setTheme] = useState(() => localStorage.getItem('appTheme') || 'light'); // 'light', 'dark', 'sepia'
+  const [fontFamily, setFontFamily] = useState(() => localStorage.getItem('appFontFamily') || 'sans'); // 'sans', 'mono'
+  const [fontSize, setFontSize] = useState(() => localStorage.getItem('appFontSize') || 'base'); // 'sm', 'base', 'lg'
+  // Debounce timer ref for autosave
+  const autosaveTimerRef = useRef(null);
   
   // Check authentication status on mount
   useEffect(() => {
     const authData = localStorage.getItem('notionAuth')
     if (authData) {
-      const { user, databases } = JSON.parse(authData)
-      setUserInfo(user)
-      setDatabases(databases)
-      setIsAuthenticated(true)
-      setNotionAuth(JSON.parse(authData))
+      try { // Add try-catch for safer parsing
+        const parsedData = JSON.parse(authData);
+        // Provide defaults if keys are missing in localStorage
+        const user = parsedData.user || null;
+        const databases = parsedData.databases || []; // Default to empty array
+
+        setUserInfo(user);
+        setDatabases(databases); // Ensures state is always an array
+        setIsAuthenticated(true);
+        setNotionAuth(parsedData); // Store the whole parsed object
+        console.log('Auth data loaded from localStorage:', parsedData);
+      } catch (e) {
+        console.error("Failed to parse notionAuth from localStorage:", e);
+        // Clear corrupted data and reset state
+        localStorage.removeItem('notionAuth');
+        setIsAuthenticated(false);
+        setUserInfo(null);
+        setDatabases([]);
+        setNotionAuth(null);
+      }
     }
   }, [])
 
@@ -231,19 +252,135 @@ export default function App() {
       if (showTemplateModal && !event.target.closest('.template-modal-content')) {
           handleCancelTemplateModal();
       }
+      // Close 'More Options' dropdown
+      if (showMoreOptionsDropdown && !event.target.closest('.more-options-dropdown-container')) {
+         setShowMoreOptionsDropdown(false);
+      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showTagDropdown, showTemplateDropdown, showTemplateModal]);
+  }, [showTagDropdown, showTemplateDropdown, showTemplateModal, showMoreOptionsDropdown]);
+
+  // Apply theme class to HTML element and save to localStorage
+  useEffect(() => {
+    const root = window.document.documentElement;
+    root.classList.remove('light', 'dark', 'sepia'); // Remove previous theme classes
+    root.classList.add(theme); // Add current theme class
+    localStorage.setItem('appTheme', theme);
+
+    // Special handling for Tailwind's dark mode
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark'); // Ensure dark class is removed for light/sepia
+    }
+    // Add specific sepia styles if needed - for now just adds the class
+    if (theme === 'sepia') {
+        // Example: Define CSS variables or add specific classes here if not using Tailwind JIT directly
+        // root.style.setProperty('--sepia-bg', '#f1e7d0');
+        // root.style.setProperty('--sepia-text', '#433422');
+    } else {
+        // root.style.removeProperty('--sepia-bg');
+        // root.style.removeProperty('--sepia-text');
+    }
+
+  }, [theme]);
+
+  // Save font family to localStorage
+  useEffect(() => {
+    localStorage.setItem('appFontFamily', fontFamily);
+  }, [fontFamily]);
+
+  // Save font size to localStorage
+  useEffect(() => {
+    localStorage.setItem('appFontSize', fontSize);
+  }, [fontSize]);
+
+  // --- Autosave Logic ---
+  const autosaveNote = (noteId, title, content, tags) => {
+    console.log('[Autosave] Triggered for noteId:', noteId);
+    setNotes(prevNotes => {
+      let updatedNotes;
+      let noteToUpdateId = noteId;
+
+      if (noteToUpdateId) {
+        // Update existing note
+        const existingNoteIndex = prevNotes.findIndex(n => n.id === noteToUpdateId);
+        if (existingNoteIndex === -1) {
+          console.error('[Autosave] Error: Cannot find existing note with ID:', noteToUpdateId);
+          return prevNotes; // Return previous state if note not found
+        }
+        updatedNotes = [...prevNotes];
+        updatedNotes[existingNoteIndex] = {
+          ...updatedNotes[existingNoteIndex],
+          title: title,
+          content: content,
+          tags: tags, // Make sure to include tags
+          lastModified: new Date().toISOString(),
+          synced: false // Mark as unsynced whenever local changes occur
+        };
+        console.log('[Autosave] Updated existing note:', updatedNotes[existingNoteIndex]);
+      } else {
+        // Create new note if title or content exists
+        if (!title && !content) {
+          console.log('[Autosave] Skipping creation: No title or content.');
+          return prevNotes; // Don't create empty notes automatically
+        }
+        const newNote = {
+          id: Date.now().toString(), // Generate new ID
+          title: title,
+          content: content,
+          tags: tags,
+          lastModified: new Date().toISOString(),
+          createdAt: new Date().toISOString(), // Add createdAt for new notes
+          synced: false
+        };
+        updatedNotes = [...prevNotes, newNote];
+        noteToUpdateId = newNote.id; // Get the ID of the newly created note
+        setCurrentNoteId(newNote.id); // Update currentNoteId state
+        console.log('[Autosave] Created new note:', newNote);
+      }
+
+      // Save updated notes array to localStorage
+      localStorage.setItem('notes', JSON.stringify(updatedNotes));
+      return updatedNotes;
+    });
+  };
+
+  // Debounced autosave effect for title and content
+  useEffect(() => {
+    // Clear existing timer on change
+    if (autosaveTimerRef.current) {
+      clearTimeout(autosaveTimerRef.current);
+    }
+
+    // Set a new timer
+    autosaveTimerRef.current = setTimeout(() => {
+      // Only autosave if there's content or a title, or if it's an existing note being modified
+      if (currentNoteId || noteTitle || noteContent) {
+          autosaveNote(currentNoteId, noteTitle, noteContent, selectedTags);
+      }
+    }, 1500); // Autosave after 1.5 seconds of inactivity
+
+    // Cleanup timer on component unmount or before next run
+    return () => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+      }
+    };
+  // Depend on the fields that trigger the save
+  }, [noteTitle, noteContent, currentNoteId, selectedTags]); 
 
   const handleAddTag = (tag) => {
     if (!selectedTags.some(t => t.name === tag.name)) {
       setSelectedTags([...selectedTags, tag])
     }
     setShowTagDropdown(false)
+    // Close main dropdown as well if adding tag from there
+    setShowMoreOptionsDropdown(false); 
   }
 
   const handleRemoveTag = (tagToRemove) => {
@@ -346,93 +483,81 @@ export default function App() {
   // Filter out synced notes when displaying
   const unsyncedNotes = notes.filter(note => !note.synced).sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
 
-  const handleSaveNote = async () => {
-    if (!notionAuth) {
-      setConnectionError('Please connect to Notion first');
+  // New function to explicitly sync the current note
+  const handleSyncCurrentNote = async () => {
+    if (!isOnline || !isAuthenticated || !currentNoteId || isSyncing) {
+      console.log('[Sync] Conditions not met:', { isOnline, isAuthenticated, currentNoteId, isSyncing });
+      return; // Exit if offline, not auth, no note selected, or already syncing
+    }
+
+    const noteToSync = notes.find(n => n.id === currentNoteId);
+
+    if (!noteToSync) {
+      console.error('[Sync] Cannot find current note with ID:', currentNoteId);
+      setConnectionError('Could not find the note to sync.');
       return;
     }
 
-    try {
-      setIsSyncing(true);
-      const newNote = {
-        id: currentNoteId || Date.now().toString(),
-        title: noteTitle,
-        content: noteContent,
-        tags: selectedTags,
-        category: selectedCategory,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
+    // Optional: Check if already synced (though autosave should mark it unsynced on change)
+    // if (noteToSync.synced) {
+    //   console.log('[Sync] Note already synced:', currentNoteId);
+    //   return;
+    // }
 
-      // Always save to local storage first
+    setIsSyncing(true);
+    setConnectionError(null);
+    console.log(`[Sync] Attempting to sync note ID: ${currentNoteId}`);
+
+    try {
+      // Use the existing syncNote function
+      await notionOAuth.syncNote(noteToSync, notionAuth.accessToken);
+      
+      // Update local state to synced: true
       setNotes(prevNotes => {
-        const existingNoteIndex = prevNotes.findIndex(n => n.id === newNote.id);
-        if (existingNoteIndex >= 0) {
-          const updatedNotes = [...prevNotes];
-          updatedNotes[existingNoteIndex] = { ...newNote, synced: false };
-          localStorage.setItem('notes', JSON.stringify(updatedNotes));
-          return updatedNotes;
-        }
-        const updatedNotes = [...prevNotes, { ...newNote, synced: false }];
-        localStorage.setItem('notes', JSON.stringify(updatedNotes));
+        const updatedNotes = prevNotes.map(note => 
+          note.id === currentNoteId ? { ...note, synced: true } : note
+        );
+        localStorage.setItem('notes', JSON.stringify(updatedNotes)); // Update localStorage as well
+        console.log(`[Sync] Successfully synced note ID: ${currentNoteId}. Updated local state.`);
         return updatedNotes;
       });
-
-      // Try to sync with Notion if online
-      if (isOnline) { 
-        try {
-          // Attempt the sync. If it fails, the catch block below will handle it.
-          await notionOAuth.syncNote(newNote, notionAuth.accessToken);
-          
-          // If sync didn't throw, update local state to synced: true
-          console.log(`Successfully synced note ${newNote.id} after saving.`);
-          setNotes(prevNotes => {
-            const updatedNotes = prevNotes.map(note => 
-              note.id === newNote.id ? { ...note, synced: true } : note
-            );
-            localStorage.setItem('notes', JSON.stringify(updatedNotes));
-            return updatedNotes;
-          });
-          setConnectionError(null); // Clear previous errors on successful sync
-
-        } catch (syncError) {
-          // Catch errors specifically from notionOAuth.syncNote
-          const errorMessage = syncError.message || 'Failed to sync note with Notion after saving.';
-          console.error('Sync failed after save:', errorMessage);
-          setConnectionError(errorMessage); 
-          // Note remains marked as synced: false locally (already done before the try block)
-        }
-      } else {
-         // If offline, ensure the note is marked as unsynced (already done above)
-         console.log("Offline during save, note marked for later sync.");
-         // Optionally inform user they are offline
-         // setConnectionError("You are offline. Note saved locally."); 
-      }
-
-      // Reset form fields regardless of sync status
+      
+      // --- Clear editor for new note after successful sync ---
+      console.log('[Sync] Clearing editor for new note.');
+      setCurrentNoteId(null);
       setNoteTitle('');
       setNoteContent('');
       setSelectedTags([]);
-      setSelectedCategory('');
-      setCurrentNoteId(null);
-    
+      // --- End clear editor ---
+      
     } catch (error) {
-      console.error('Error saving note:', error);
-      setConnectionError(error.message);
+      const errorMessage = error.message || 'Failed to sync note with Notion.';
+      console.error('[Sync] Error syncing note:', errorMessage);
+      setConnectionError(errorMessage);
+      // Note remains marked as synced: false locally
     } finally {
       setIsSyncing(false);
     }
   };
 
   const handleSelectNote = (note) => {
+    // Clear any pending autosave from the previous note
+    if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+    }
+    // Set ID first
     setCurrentNoteId(note.id)
-    setNoteTitle(note.title)
-    setNoteContent(note.content)
-    setSelectedTags(note.tags)
+    setNoteTitle(note.title || "") // Handle potentially undefined title
+    setNoteContent(note.content || "") // Handle potentially undefined content
+    setSelectedTags(note.tags || []) // Handle potentially undefined tags
   }
 
   const handleNewNote = () => {
-    setCurrentNoteId(null)
+     // Clear any pending autosave from the previous note
+    if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+    }
+    setCurrentNoteId(null) // Explicitly set to null for new note
     setNoteTitle("")
     setNoteContent("")
     setSelectedTags([])
@@ -495,7 +620,8 @@ export default function App() {
     
     setNoteTitle(finalTitle);
     setNoteContent(template.content);
-    setShowTemplateDropdown(false); // Close dropdown
+    setShowTemplateDropdown(false); // Close template sub-dropdown
+    setShowMoreOptionsDropdown(false); // Close main dropdown
     // Optional: Automatically close sidebar on mobile after applying template
     if (window.innerWidth < 768) { // md breakpoint
         closeSidebar();
@@ -506,26 +632,26 @@ export default function App() {
   const handleOpenAddTemplateModal = () => {
     setIsEditingTemplate(false);
     setEditingTemplateIndex(null);
-    // Reset form fields
     setTemplateFormName('');
     setTemplateFormTitle('');
     setTemplateFormContent('');
-    setShowTemplateModal(true); // Show the modal
-    setShowTemplateDropdown(false); // Close the dropdown
+    setShowTemplateModal(true); 
+    setShowTemplateDropdown(false); // Close template sub-dropdown
+    setShowMoreOptionsDropdown(false); // Close main dropdown
   };
 
   const handleOpenEditTemplateModal = (index) => {
     const templateToEdit = customTemplates[index];
-    if (!templateToEdit) return; // Safety check
+    if (!templateToEdit) return; 
 
     setIsEditingTemplate(true);
     setEditingTemplateIndex(index);
-    // Populate form fields with existing data
     setTemplateFormName(templateToEdit.name);
     setTemplateFormTitle(templateToEdit.title);
     setTemplateFormContent(templateToEdit.content);
-    setShowTemplateModal(true); // Show the modal
-    setShowTemplateDropdown(false); // Close the dropdown
+    setShowTemplateModal(true); 
+    setShowTemplateDropdown(false); // Close template sub-dropdown
+    setShowMoreOptionsDropdown(false); // Close main dropdown
   };
 
   const handleCancelTemplateModal = () => {
@@ -541,675 +667,522 @@ export default function App() {
 
   const handleSaveOrUpdateTemplate = (e) => {
     e.preventDefault();
-    if (!templateFormName.trim()) {
-      console.error("Template name cannot be empty.");
-      return;
-    }
-    const templateData = {
-      name: templateFormName.trim(),
+    console.log('[handleSaveOrUpdateTemplate] Start');
+    console.log('[handleSaveOrUpdateTemplate] Current customTemplates state:', customTemplates);
+    console.log('[handleSaveOrUpdateTemplate] Editing:', isEditingTemplate, 'Index:', editingTemplateIndex);
+
+    const newTemplate = {
+      name: templateFormName,
       title: templateFormTitle,
-      content: templateFormContent
+      content: templateFormContent,
     };
+    console.log('[handleSaveOrUpdateTemplate] New/Updated Template:', newTemplate);
 
-    console.log('[handleSaveOrUpdateTemplate] State *before* update:', customTemplates);
-    console.log('[handleSaveOrUpdateTemplate] Template data to add/update:', templateData);
-
+    let updatedTemplates;
     if (isEditingTemplate && editingTemplateIndex !== null) {
-      const updatedTemplates = [...customTemplates];
-      updatedTemplates[editingTemplateIndex] = templateData;
-      console.log('[handleSaveOrUpdateTemplate] Setting updated state (edit):', updatedTemplates);
-      setCustomTemplates(updatedTemplates); 
+      // Update existing template
+      updatedTemplates = customTemplates.map((template, index) =>
+        index === editingTemplateIndex ? newTemplate : template
+      );
+      console.log('[handleSaveOrUpdateTemplate] Updated templates array (edit):', updatedTemplates);
     } else {
-      console.log('[handleSaveOrUpdateTemplate] Setting updated state (add):', prev => [...prev, templateData]);
-      setCustomTemplates(prev => [...prev, templateData]); 
+      // Add new template
+      // Ensure customTemplates is an array before spreading
+      const currentTemplatesArray = Array.isArray(customTemplates) ? customTemplates : [];
+      updatedTemplates = [...currentTemplatesArray, newTemplate];
+      console.log('[handleSaveOrUpdateTemplate] Updated templates array (add):', updatedTemplates);
     }
-    
-    // Note: Logging *after* setCustomTemplates here won't show the immediate update due to async nature
 
-    handleCancelTemplateModal();
+    // Update state immediately
+    setCustomTemplates(updatedTemplates);
+    // Log state right after setting it
+    console.log('[handleSaveOrUpdateTemplate] State after setCustomTemplates:', updatedTemplates);
+
+    // Save to localStorage (moved to useEffect)
+    // console.log('[handleSaveOrUpdateTemplate] Saving updated templates to localStorage:', JSON.stringify(updatedTemplates));
+    // localStorage.setItem('customNoteTemplates', JSON.stringify(updatedTemplates));
+    
+    setShowTemplateModal(false); // Close modal
+    // Reset form fields
+    setTemplateFormName('');
+    setTemplateFormTitle('');
+    setTemplateFormContent('');
+    setIsEditingTemplate(false);
+    setEditingTemplateIndex(null);
+    console.log('[handleSaveOrUpdateTemplate] End');
   };
+
+  // --- Theme and Font Handlers ---
+  const handleThemeChange = (newTheme) => {
+      setTheme(newTheme);
+      // Close dropdown after selection
+       setShowMoreOptionsDropdown(false);
+  };
+
+  const handleFontChange = (newFont) => {
+      setFontFamily(newFont);
+      // Close dropdown after selection
+       setShowMoreOptionsDropdown(false);
+  };
+
+  // New handler for font size change
+  const handleFontSizeChange = (newSize) => {
+    setFontSize(newSize);
+    setShowMoreOptionsDropdown(false); // Close dropdown after selection
+  }
 
   return (
     <ErrorBoundary>
-      {/* Main container - Use flex-col on mobile, flex-row on md and up */}
-      <div className="flex flex-col md:flex-row h-screen bg-gray-50">
-        
-        {/* Mobile Header (Only visible on screens smaller than md) */}
-        <header className="md:hidden bg-white shadow-sm px-4 py-3 flex justify-between items-center border-b">
-          <button 
-            onClick={toggleSidebar}
-            className="p-2 rounded-lg hover:bg-gray-100 active:bg-gray-200"
-            aria-label="Toggle menu"
-          >
-            <Menu size={24} className="text-gray-600" />
-          </button>
-          <h1 className="font-semibold text-lg">Thought Base</h1>
-          {/* Placeholder for potential right-side icon/button if needed */}
-          <div className="w-8 h-8"></div> 
-        </header>
+      {/* Main container with flex layout - Added dark mode classes */}
+      <div className={`flex h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 ${fontFamily === 'mono' ? 'font-mono' : 'font-sans'}`}>
 
-        {/* Sidebar */}
-        {/* Base styles: fixed inset-0, transform for sliding, z-index */}
-        {/* Responsive styles: 
-            - Mobile: full width, translate-x controlled by state
-            - Desktop (md+): static position, fixed width, always visible (translate-x-0) 
-        */}
-        <div className={`fixed inset-0 md:static z-30 bg-white shadow-lg md:shadow-none border-r border-gray-200 
-                       transform transition-transform duration-300 ease-in-out 
-                       ${showSidebar ? 'translate-x-0' : '-translate-x-full'} 
-                       md:translate-x-0 md:w-64 lg:w-80 flex flex-col`}
-        >
-          {/* Sidebar Header */}
-          <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-            <h2 className="text-lg font-semibold hidden md:block">My Notes</h2>
-            {/* Close button - visible only below md */}
-            <button 
-              onClick={closeSidebar}
-              className="p-2 rounded-lg hover:bg-gray-100 active:bg-gray-200 md:hidden"
-              aria-label="Close menu"
-            >
-              <X size={24} className="text-gray-600" />
+        {/* Sidebar (No major changes here, styling is mostly self-contained) */}
+        <div className={`fixed inset-y-0 left-0 transform ${showSidebar ? 'translate-x-0' : '-translate-x-full'} w-64 bg-gray-50 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-transform duration-300 ease-in-out z-30 flex flex-col`}>
+          <div className="p-4 flex justify-between items-center border-b border-gray-200 dark:border-gray-700">
+            <h2 className="text-lg font-semibold">Notes</h2>
+            <button onClick={closeSidebar} className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700">
+              <X size={20} />
             </button>
           </div>
-
-          {/* Authentication Section */}
-          <div className="p-4 border-b">
-            {!isAuthenticated ? (
-              <div className="flex flex-col items-center">
-                <button 
-                  className="w-full bg-teal-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-teal-600 flex items-center justify-center space-x-2 disabled:opacity-50"
-                  onClick={handleConnect}
-                  disabled={isConnecting}
-                >
-                  {isConnecting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Connecting...
-                    </>
-                  ) : (
-                    <>
-                      <img 
-                        src="https://www.notion.so/front-static/favicon.ico" 
-                        alt="Notion" 
-                        className="w-4 h-4 mr-2"
-                      />
-                      Connect with Notion
-                    </>
-                  )}
+          <div className="flex-grow overflow-y-auto p-4 space-y-2">
+            <button onClick={handleNewNoteAndCloseSidebar} className="w-full flex items-center justify-center px-3 py-2 mb-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+              <PlusCircle size={16} className="mr-1" /> New Note
+            </button>
+            {/* Filter notes to show only unsynced ones before sorting and mapping */}
+            {notes
+              .filter(note => !note.synced)
+              .sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified))
+              .map((note) => (
+              <div
+                key={note.id}
+                onClick={() => handleSelectNoteAndCloseSidebar(note)}
+                className={`p-2 rounded cursor-pointer ${currentNoteId === note.id ? 'bg-indigo-100 dark:bg-indigo-900' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+              >
+                <h3 className="font-medium truncate">{note.title || "Untitled Note"}</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{note.content ? note.content.substring(0, 50) + '...' : 'Empty note'}</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500">{new Date(note.lastModified).toLocaleDateString()}</p>
+              </div>
+            ))}
+          </div>
+           {/* Sidebar Footer - Notion Connection */}
+          <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+            {isAuthenticated && userInfo ? (
+              <div className="flex items-center justify-between">
+                <span className="text-sm truncate flex items-center">
+                   <img src={userInfo.avatar_url} alt="User Avatar" className="w-6 h-6 rounded-full mr-2" />
+                   {userInfo.name}
+                </span>
+                <button onClick={handleDisconnect} className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700" title="Disconnect Notion">
+                  <LogOut size={16} />
                 </button>
-                {connectionError && (
-                  <span className="text-red-500 text-xs mt-2 text-center">{connectionError}</span>
-                )}
               </div>
             ) : (
-              <div className="flex flex-col space-y-2">
-                <div className="flex items-center space-x-2">
-                  {userInfo?.avatar_url && (
-                    <img 
-                      src={userInfo.avatar_url} 
-                      alt={userInfo.name} 
-                      className="w-8 h-8 rounded-full"
-                    />
-                  )}
-                  <span className="text-sm text-gray-700 font-medium truncate">{userInfo?.name}</span>
+              <button onClick={handleConnect} disabled={isConnecting} className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-white bg-gray-700 rounded-md hover:bg-gray-800 disabled:opacity-50">
+                {isConnecting ? <Loader2 className="animate-spin mr-2" size={16} /> : null}
+                Connect to Notion
+              </button>
+            )}
+            {connectionError && <p className="text-xs text-red-500 mt-1">{connectionError}</p>}
+             {/* Database Selector - simplified */}
+             {isAuthenticated && databases.length > 0 && (
+                <div className="mt-2">
+                  <select
+                    value={selectedDatabase || ''}
+                    onChange={(e) => setSelectedDatabase(e.target.value)}
+                    className="w-full text-xs p-1 border border-gray-300 rounded bg-white dark:bg-gray-700 dark:border-gray-600 focus:ring-indigo-500 focus:border-indigo-500"
+                  >
+                    <option value="" disabled>Select Notion DB</option>
+                    {databases.map(db => (
+                      <option key={db.id} value={db.id}>{db.title}</option>
+                    ))}
+                  </select>
                 </div>
-                 <div className="flex items-center justify-between text-xs">
-                    {isOnline ? 
-                      <div className="flex items-center text-green-600">
-                        <Wifi size={14} className="mr-1" /> Online
-                      </div> : 
-                      <div className="flex items-center text-amber-600">
-                        <WifiOff size={14} className="mr-1" /> Offline
-                      </div>
-                    }
-                     <button 
-                      className="text-xs text-blue-600 hover:text-blue-800 flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-                      onClick={syncUnsyncedNotes}
-                      disabled={isSyncing || !isOnline}
-                      title={!isOnline ? "Cannot sync while offline" : "Sync notes with Notion"}
+              )}
+          </div>
+        </div>
+
+         {/* Main content area */}
+        <div className="flex-1 flex flex-col transition-all duration-300 ease-in-out overflow-hidden"> {/* Added overflow-hidden */}
+           {/* Header - Adjusted padding and height */}
+           <header className="flex items-center justify-between p-2 border-b border-gray-200 dark:border-gray-700 h-12 flex-shrink-0"> {/* Reduced height, added flex-shrink-0 */}
+              {/* Left side: Menu toggle and Title */}
+              <div className="flex items-center flex-grow min-w-0"> {/* Added flex-grow and min-w-0 */} 
+                <button onClick={toggleSidebar} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 mr-2 flex-shrink-0">
+                  <Menu size={20} />
+                </button>
+                 {/* Minimal Title Input - More subtle styling */}
+                 <input
+                    type="text"
+                    value={noteTitle}
+                    onChange={(e) => setNoteTitle(e.target.value)}
+                    placeholder="Note Title"
+                    className="text-base font-medium bg-transparent focus:outline-none focus:ring-0 border-none p-1 flex-grow min-w-0 truncate dark:placeholder-gray-600 placeholder-gray-400 hover:placeholder-gray-500 focus:placeholder-gray-500 dark:hover:placeholder-gray-500 dark:focus:placeholder-gray-400"
+                 />
+              </div>
+
+               {/* Right side: Actions and Status */}
+               <div className="flex items-center space-x-2">
+                 {/* Editor Mode Toggle */}
+                <div className="flex items-center border border-gray-300 dark:border-gray-600 rounded-md">
+                     <button
+                        onClick={() => setEditorViewMode('editor')}
+                        className={`px-2 py-1 text-xs rounded-l-md ${editorViewMode === 'editor' ? 'bg-indigo-100 dark:bg-indigo-800' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                        title="Edit Mode"
                     >
-                      {isSyncing ? (
-                        <>
-                          <Loader2 size={14} className="mr-1 animate-spin" />
-                          Syncing...
-                        </>
-                      ) : (
-                        'Sync Now'
-                      )}
+                         <Code size={14} />
+                    </button>
+                     <button
+                        onClick={() => setEditorViewMode('preview')}
+                        className={`px-2 py-1 text-xs rounded-r-md ${editorViewMode === 'preview' ? 'bg-indigo-100 dark:bg-indigo-800' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                        title="Preview Mode"
+                    >
+                         <Eye size={14} />
                     </button>
                  </div>
-                <button
-                  onClick={handleDisconnect}
-                  className="w-full text-left text-sm text-red-600 hover:text-red-800 hover:bg-red-50 p-2 rounded-md flex items-center space-x-2"
-                  title="Disconnect from Notion"
-                >
-                  <LogOut size={16} />
-                  <span>Disconnect</span>
-                </button>
-              </div>
-            )}
-          </div>
 
-          {/* New Note Button & Quick Actions */}
-          <div className="p-4 space-y-2">
-            <button 
-              onClick={handleNewNoteAndCloseSidebar} // Close sidebar on new note
-              className="w-full bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 text-sm font-medium flex items-center justify-center space-x-2"
-            >
-              <PenLine size={16} />
-              <span>New Note</span>
-            </button>
+                 {/* Explicit Sync Button */} 
+                 <button 
+                    onClick={handleSyncCurrentNote}
+                    disabled={!isOnline || !isAuthenticated || !currentNoteId || isSyncing || notes.find(n => n.id === currentNoteId)?.synced}
+                    className="p-2 rounded text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={!isAuthenticated ? "Connect to Notion first" : !isOnline ? "Cannot sync while offline" : !currentNoteId ? "Select a note to sync" : notes.find(n => n.id === currentNoteId)?.synced ? "Note is synced" : "Sync note to Notion"}
+                 >
+                    {isSyncing ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+                 </button>
 
-            {/* Quick Actions Row */}
-            <div className="flex space-x-2"> 
-              {/* Template Button Dropdown */}
-              <div className="relative flex-1 template-dropdown-container">
-                <button
-                  className="w-full bg-gray-100 text-gray-700 py-1.5 px-3 rounded-md hover:bg-gray-200 text-xs font-medium flex items-center justify-center space-x-1.5"
-                  title="Use a template"
-                  onClick={(e) => { e.stopPropagation(); setShowTemplateDropdown(!showTemplateDropdown); }}
-                  aria-haspopup="true"
-                  aria-expanded={showTemplateDropdown}
-                >
-                  <FileText size={14} />
-                  <span>Templates</span>
-                   <ChevronDown size={12} className={`ml-auto transition-transform duration-200 ${showTemplateDropdown ? 'rotate-180' : ''}`} />
-                </button>
-                {showTemplateDropdown && (
-                  <div className="absolute z-20 mt-1 w-full max-h-60 overflow-y-auto bg-white rounded-md shadow-lg border border-gray-200 py-1 left-0 right-0">
-                    {/* This loop now renders ALL templates (built-in and custom) */}
-                    {customTemplates.map((template, index) => (
-                      <div key={`custom-${index}-${template.name}`} className="flex items-center justify-between px-3 py-0 hover:bg-gray-100">
-                        <button
-                          className={`flex-grow text-left py-2 text-sm flex items-center gap-2`}
-                          onClick={(e) => { e.stopPropagation(); handleApplyTemplate(template); }}
-                        >
-                          {template.name}
-                        </button>
-                        {/* Edit button applies to all templates now */}
-                        <button
-                          className="p-1 text-gray-400 hover:text-blue-600 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          onClick={(e) => { e.stopPropagation(); handleOpenEditTemplateModal(index); }}
-                          title={`Edit "${template.name}" template`}
-                        >
-                          <Edit size={14} stroke="currentColor" /> 
-                        </button>
-                      </div>
-                    ))}
+                  {/* Online/Offline Status Icon */}
+                 <div className="flex items-center space-x-1">
+                     {isOnline ? <Wifi size={16} className="text-green-500" title="Online"/> : <WifiOff size={16} className="text-red-500" title="Offline"/>}
+                 </div>
 
-                    {/* Separator before Add button (only needs customTemplates check now) */}
-                    {customTemplates.length > 0 && (
-                       <hr className="my-1 border-gray-200" />
-                    )}
+                 {/* More Options Dropdown */}
+                 <div className="relative more-options-dropdown-container">
+                    <button onClick={() => setShowMoreOptionsDropdown(!showMoreOptionsDropdown)} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700">
+                         <MoreVertical size={20} />
+                     </button>
+                     {showMoreOptionsDropdown && (
+                          <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-20 border border-gray-200 dark:border-gray-700 max-h-[80vh] overflow-y-auto">
+                               {/* Theme Selection */}
+                               <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+                                   <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">Theme</h4>
+                                   <div className="flex items-center justify-between space-x-1">
+                                       {/* Close dropdown on click */}
+                                       <button onClick={() => handleThemeChange('light')} className={`flex-1 text-xs py-1 px-2 rounded ${theme === 'light' ? 'bg-indigo-100 dark:bg-indigo-800' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}`}>Light</button>
+                                       <button onClick={() => handleThemeChange('dark')} className={`flex-1 text-xs py-1 px-2 rounded ${theme === 'dark' ? 'bg-indigo-100 dark:bg-indigo-800' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}`}>Night</button>
+                                       <button onClick={() => handleThemeChange('sepia')} className={`flex-1 text-xs py-1 px-2 rounded ${theme === 'sepia' ? 'bg-indigo-100 dark:bg-indigo-800' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}`}>Sepia</button>
+                                   </div>
+                               </div>
 
-                    {/* Add Custom Template Button */}
-                    <button
-                      className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 flex items-center gap-2"
-                      onClick={(e) => { e.stopPropagation(); handleOpenAddTemplateModal(); }}
-                    >
-                      <PlusCircle size={14} />
-                      Add Custom Template
-                    </button>
-                  </div>
-                )}
-              </div>
+                               {/* Font Family Selection */}
+                               <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+                                   <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">Font Family</h4>
+                                   <div className="flex items-center border border-gray-300 dark:border-gray-600 rounded-md w-full">
+                                       {/* Close dropdown on click */}
+                                       <button
+                                           onClick={() => handleFontChange('sans')}
+                                           className={`flex-1 px-2 py-1 text-xs rounded-l-md ${fontFamily === 'sans' ? 'bg-indigo-100 dark:bg-indigo-800' : 'hover:bg-gray-100 dark:hover:bg-gray-700'} flex items-center justify-center space-x-1`}
+                                           title="Sans Serif Font"
+                                       >
+                                          <span>Sans</span>
+                                       </button>
+                                       {/* Close dropdown on click */}
+                                       <button
+                                           onClick={() => handleFontChange('mono')}
+                                           className={`flex-1 px-2 py-1 text-xs rounded-r-md ${fontFamily === 'mono' ? 'bg-indigo-100 dark:bg-indigo-800' : 'hover:bg-gray-100 dark:hover:bg-gray-700'} flex items-center justify-center space-x-1`}
+                                           title="Monospace Font"
+                                       >
+                                           <span>Mono</span>
+                                       </button>
+                                   </div>
+                               </div>
 
-              {/* Formatting Help Button (Now functional) */}
-              <button 
-                className="flex-1 bg-gray-100 text-gray-700 py-1.5 px-3 rounded-md hover:bg-gray-200 text-xs font-medium flex items-center justify-center space-x-1.5"
-                title="View Markdown formatting help"
-                onClick={() => setShowFormattingHelpModal(true)}
-              >
-                <BookOpen size={14} />
-                <span>Formatting</span>
-              </button>
-            </div>
-          </div>
+                               {/* Font Size Selection */}
+                               <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+                                   <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">Font Size</h4>
+                                   <div className="flex items-center border border-gray-300 dark:border-gray-600 rounded-md w-full">
+                                       {/* Close dropdown on click */}
+                                       <button
+                                           onClick={() => handleFontSizeChange('sm')}
+                                           className={`flex-1 px-2 py-1 text-xs rounded-l-md ${fontSize === 'sm' ? 'bg-indigo-100 dark:bg-indigo-800' : 'hover:bg-gray-100 dark:hover:bg-gray-700'} flex items-center justify-center`}
+                                           title="Small Font Size"
+                                       >
+                                          Small
+                                       </button>
+                                       {/* Close dropdown on click */}
+                                       <button
+                                           onClick={() => handleFontSizeChange('base')}
+                                           className={`flex-1 px-2 py-1 text-xs border-l border-r border-gray-300 dark:border-gray-600 ${fontSize === 'base' ? 'bg-indigo-100 dark:bg-indigo-800' : 'hover:bg-gray-100 dark:hover:bg-gray-700'} flex items-center justify-center`}
+                                           title="Medium Font Size"
+                                       >
+                                          Medium
+                                       </button>
+                                       {/* Close dropdown on click */}
+                                       <button
+                                           onClick={() => handleFontSizeChange('lg')}
+                                           className={`flex-1 px-2 py-1 text-xs rounded-r-md ${fontSize === 'lg' ? 'bg-indigo-100 dark:bg-indigo-800' : 'hover:bg-gray-100 dark:hover:bg-gray-700'} flex items-center justify-center`}
+                                           title="Large Font Size"
+                                       >
+                                          Large
+                                       </button>
+                                   </div>
+                               </div>
 
-          {/* Notes List */}
-          <div className="flex-1 overflow-y-auto p-4 pt-0 space-y-2"> 
-            {unsyncedNotes.length === 0 && (
-              <div className="text-center py-10 px-4">
-                <FileText size={48} className="mx-auto text-gray-400 mb-4" />
-                <h3 className="text-lg font-medium text-gray-700 mb-2">No Notes Yet</h3>
-                <p className="text-sm text-gray-500 mb-4">Click the "New Note" button above to get started.</p>
-              </div>
-            )}
-            {unsyncedNotes.map(note => {
-              // Skip empty notes
-              if (!note.title && !note.content) return null;
-              
-              return (
-                <div 
-                  key={note.id || `note-${Date.now()}-${Math.random()}`}
-                  onClick={() => handleSelectNoteAndCloseSidebar(note)} // Close sidebar on select
-                  className={`p-3 rounded-lg cursor-pointer hover:bg-gray-100 border ${
-                    currentNoteId === note.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="flex justify-between items-start mb-1">
-                    <h3 className="font-medium text-sm truncate pr-2">{note.title || 'Untitled Note'}</h3>
-                    {!note.synced && (
-                      <WifiOff size={14} className="text-amber-500 flex-shrink-0" title="Not Synced"/>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-1 mb-2">
-                    {note.tags && note.tags.map(tag => (
-                      <span 
-                        key={`${note.id || 'untitled'}-${tag.name}`}
-                        className={`text-xs px-2 py-0.5 rounded-md bg-${tag.color}-100 text-${tag.color}-800`}
-                      >
-                        {tag.name}
-                      </span>
-                    ))}
-                  </div>
-                  <p className="text-xs text-gray-400">
-                    {new Date(note.updatedAt || note.createdAt || Date.now()).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
+                               {/* Editor Mode Toggle */}
+                               <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+                                  <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">View Mode</h4>
+                                  <div className="flex items-center border border-gray-300 dark:border-gray-600 rounded-md w-full">
+                                      {/* Close dropdown on click */}
+                                      <button
+                                          onClick={() => { setEditorViewMode('editor'); setShowMoreOptionsDropdown(false); }}
+                                          className={`flex-1 px-2 py-1 text-xs rounded-l-md ${editorViewMode === 'editor' ? 'bg-indigo-100 dark:bg-indigo-800' : 'hover:bg-gray-100 dark:hover:bg-gray-700'} flex items-center justify-center space-x-1`}
+                                          title="Edit Mode"
+                                      >
+                                          <Code size={14} /> <span>Editor</span>
+                                      </button>
+                                      {/* Close dropdown on click */}
+                                      <button
+                                          onClick={() => { setEditorViewMode('preview'); setShowMoreOptionsDropdown(false); }}
+                                          className={`flex-1 px-2 py-1 text-xs rounded-r-md ${editorViewMode === 'preview' ? 'bg-indigo-100 dark:bg-indigo-800' : 'hover:bg-gray-100 dark:hover:bg-gray-700'} flex items-center justify-center space-x-1`}
+                                          title="Preview Mode"
+                                      >
+                                          <Eye size={14} /> <span>Preview</span>
+                                      </button>
+                                  </div>
+                              </div>
+                                {/* Notion Connection Section */}
+                               <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+                                   <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">Notion</h4>
+                                   {isAuthenticated && userInfo ? (
+                                       <div className="flex items-center justify-between mb-1">
+                                           <span className="text-sm truncate flex items-center">
+                                               <img src={userInfo.avatar_url} alt="User Avatar" className="w-5 h-5 rounded-full mr-2" />
+                                               {userInfo.name}
+                                           </span>
+                                           {/* Close dropdown on click */}
+                                           <button onClick={() => { handleDisconnect(); setShowMoreOptionsDropdown(false); }} className="text-xs text-red-600 hover:text-red-800" title="Disconnect Notion">
+                                               Disconnect
+                                           </button>
+                                       </div>
+                                   ) : (
+                                       // Close dropdown on click
+                                       <button onClick={() => { handleConnect(); setShowMoreOptionsDropdown(false); }} disabled={isConnecting} className="w-full flex items-center justify-center px-2 py-1 text-sm font-medium text-white bg-gray-700 rounded hover:bg-gray-800 disabled:opacity-50">
+                                           {isConnecting ? <Loader2 className="animate-spin mr-1" size={14} /> : null}
+                                           Connect to Notion
+                                       </button>
+                                   )}
+                                   {connectionError && <p className="text-xs text-red-500 mt-1">{connectionError}</p>}
+                                   {/* Database Selector */}
+                                   {isAuthenticated && databases.length > 0 && (
+                                       <select
+                                           value={selectedDatabase || ''}
+                                           onChange={(e) => setSelectedDatabase(e.target.value)} // Selecting DB doesn't close dropdown
+                                           className="w-full text-xs p-1 mt-2 border border-gray-300 rounded bg-white dark:bg-gray-700 dark:border-gray-600 focus:ring-indigo-500 focus:border-indigo-500"
+                                       >
+                                           <option value="" disabled>Select Notion DB</option>
+                                           {databases.map(db => (
+                                               <option key={db.id} value={db.id}>{db.title}</option>
+                                           ))}
+                                       </select>
+                                   )}
+                               </div>
 
-          {/* Sidebar Footer */}
-          <div className="p-4 border-t border-gray-200 mt-auto">
-            <button
-              onClick={handleCheckForUpdates}
-              className="flex items-center space-x-2 text-sm text-gray-600 hover:text-gray-900 w-full justify-center p-2 rounded-lg hover:bg-gray-100"
-            >
-              <RefreshCw className="h-4 w-4" />
-              <span>Check for Updates</span>
-            </button>
-          </div>
-        </div>
+                               {/* Tags Section */}
+                               <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+                                   <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">Tags</h4>
+                                   <div className="flex flex-wrap gap-1 mb-2">
+                                       {selectedTags.map(tag => (
+                                           <span key={tag.name} className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-${tag.color}-100 text-${tag.color}-800 dark:bg-${tag.color}-900 dark:text-${tag.color}-200`}>
+                                               {tag.name}
+                                               <button onClick={() => handleRemoveTag(tag)} className={`ml-1 flex-shrink-0 text-${tag.color}-500 hover:text-${tag.color}-700 focus:outline-none`}>
+                                                   <X size={10} strokeWidth={3}/>
+                                               </button>
+                                           </span>
+                                       ))}
+                                   </div>
+                                   {/* Tag sub-dropdown container */}
+                                   <div className="relative tag-dropdown-container">
+                                        <button onClick={() => setShowTagDropdown(!showTagDropdown)} className="w-full text-left px-2 py-1 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center justify-between">
+                                           Add Tag <ChevronDown size={14} className={`transition-transform ${showTagDropdown ? 'rotate-180' : ''}`} />
+                                       </button>
+                                       {showTagDropdown && (
+                                           <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-30 border border-gray-200 dark:border-gray-700">
+                                               {AVAILABLE_TAGS.filter(at => !selectedTags.some(st => st.name === at.name)).map(tag => (
+                                                   // handleAddTag now closes the main dropdown
+                                                   <button
+                                                       key={tag.name}
+                                                       onClick={() => handleAddTag(tag)} 
+                                                       className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center"
+                                                   >
+                                                       <span className={`w-2.5 h-2.5 rounded-full mr-2 bg-${tag.color}-500`}></span>
+                                                       {tag.name}
+                                                   </button>
+                                               ))}
+                                               {AVAILABLE_TAGS.filter(at => !selectedTags.some(st => st.name === at.name)).length === 0 && (
+                                                   <p className="px-3 py-1.5 text-sm text-gray-500 dark:text-gray-400">No more tags</p>
+                                               )}
+                                           </div>
+                                       )}
+                                   </div>
+                               </div>
 
-        {/* Backdrop (for mobile sidebar) */}
-        {showSidebar && (
-          <div 
-            className="fixed inset-0 bg-black bg-opacity-30 z-20 md:hidden"
-            onClick={closeSidebar}
-            aria-hidden="true"
-          ></div>
-        )}
+                               {/* Templates Section */}
+                               {/* Template sub-dropdown container */}
+                               <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700 template-dropdown-container"> 
+                                  <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">Templates</h4>
+                                  <button onClick={() => setShowTemplateDropdown(!showTemplateDropdown)} className="w-full text-left px-2 py-1 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center justify-between">
+                                       Apply Template <ChevronDown size={14} className={`transition-transform ${showTemplateDropdown ? 'rotate-180' : ''}`} />
+                                  </button>
+                                   {showTemplateDropdown && (
+                                       <div className="absolute right-0 mt-1 w-56 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-30 border border-gray-200 dark:border-gray-700">
+                                           {/* handleOpenAddTemplateModal closes the main dropdown */}
+                                           <button onClick={handleOpenAddTemplateModal} className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center">
+                                                <PlusCircle size={14} className="mr-2 flex-shrink-0" /> Add New Template
+                                           </button>
+                                           {(Array.isArray(customTemplates) ? customTemplates : []).map((template, index) => (
+                                                <div key={index} className="flex items-center justify-between px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 group">
+                                                    {/* handleApplyTemplate closes the main dropdown */}
+                                                    <span onClick={() => handleApplyTemplate(template)} className="flex-grow cursor-pointer truncate">{template.name}</span>
+                                                    {/* handleOpenEditTemplateModal closes the main dropdown */}
+                                                    <button onClick={() => handleOpenEditTemplateModal(index)} className="ml-2 opacity-0 group-hover:opacity-100 text-gray-500 hover:text-indigo-600" title="Edit Template">
+                                                        <Edit size={12} className="flex-shrink-0" />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                       </div>
+                                   )}
+                               </div>
 
-        {/* Main Content Area */}
-        {/* Use flex-1 to take remaining space. Adjust padding for mobile/desktop */}
-        <div className="flex-1 flex flex-col overflow-hidden"> 
-          {/* Desktop Header (Hidden on mobile) */}
-          <header className="hidden md:flex bg-white shadow-sm px-6 py-3 justify-between items-center border-b">
-            {/* Left side - perhaps breadcrumbs or title */}
-             <h1 className="font-bold text-xl">Thought Base</h1>
-            {/* Right side - Auth status, sync, etc. */}
-            <div className="flex items-center space-x-4">
-               {/* Keep the existing desktop header buttons/info here */}
-                {!isAuthenticated ? (
-                  <div className="flex flex-col items-end"> {/* Still show connect button here */}
-                     <button 
-                      className="bg-blue-600 text-white px-4 py-1 rounded-md text-sm hover:bg-blue-700 flex items-center disabled:opacity-50"
-                      onClick={handleConnect}
-                      disabled={isConnecting}
-                    >
-                       {/* ... connect button content ... */}
-                       <>
-                          <img 
-                            src="https://www.notion.so/front-static/favicon.ico" 
-                            alt="Notion" 
-                            className="w-4 h-4 mr-2"
-                          />
-                          Connect with Notion
-                        </>
-                    </button>
-                    {connectionError && (
-                      <span className="text-red-500 text-xs mt-1">{connectionError}</span>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                    {/* Desktop Auth Info */}
-                    <div className="flex items-center space-x-2">
-                      {userInfo?.avatar_url && (
-                        <img 
-                          src={userInfo.avatar_url} 
-                          alt={userInfo.name} 
-                          className="w-7 h-7 rounded-full"
-                        />
-                      )}
-                      <span className="text-sm text-gray-600">{userInfo?.name}</span>
+                                { /* Other Actions */ }
+                               <div className="px-4 py-2">
+                                   {/* Close dropdown on click */}
+                                   <button onClick={() => { setShowFormattingHelpModal(true); setShowMoreOptionsDropdown(false); }} className="w-full text-left px-2 py-1 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center">
+                                       <BookOpen size={14} className="mr-2" /> Formatting Help
+                                   </button>
+                                   {/* Placeholder for Settings */}
+                                    <button className="w-full text-left px-2 py-1 text-sm text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center cursor-not-allowed" title="Settings (coming soon)">
+                                       <Settings size={14} className="mr-2" /> Settings
+                                   </button>
+                               </div>
+                           </div>
+                       )}
                     </div>
-                     {/* Desktop Connection Status & Sync */}
-                     <div className="flex items-center space-x-4">
-                        {isOnline ? 
-                          <div className="flex items-center text-green-600 text-sm">
-                            <Wifi className="h-4 w-4 mr-1" /> Synced
-                          </div> : 
-                          <div className="flex items-center text-amber-600 text-sm">
-                            <WifiOff className="h-4 w-4 mr-1" /> Offline
-                          </div>
-                        }
-                        <button 
-                          // Conditionally add animate-pulse when syncing
-                          className={`bg-blue-600 text-white px-3 py-1 rounded-md text-sm flex items-center hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed ${
-                            isSyncing ? 'animate-pulse' : ''
-                          }`}
-                          onClick={syncUnsyncedNotes}
-                          disabled={isSyncing || !isOnline}
-                          title={!isOnline ? "Cannot sync while offline" : "Sync notes with Notion"}
-                        >
-                          {isSyncing ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Syncing...
-                            </>
-                          ) : (
-                            'Sync Now'
-                          )}
-                        </button>
-                      </div>
-                    <button
-                      onClick={handleDisconnect}
-                      className="text-gray-500 hover:text-gray-700 p-2 rounded-full hover:bg-gray-100"
-                      title="Disconnect from Notion"
-                    >
-                      <LogOut size={18} />
-                    </button>
-                  </>
-                )}
-            </div>
-          </header>
-            
-          {/* Note Content - Updated layout for Editor + Preview */}
-          <main className="flex-grow overflow-y-auto p-4 md:p-6 lg:p-8">
-            {/* Main card container */}
-            <div className="max-w-3xl mx-auto bg-white rounded-lg shadow-md p-4 md:p-6 flex flex-col h-full">
-              {/* Note Title Input */}
-              <input
-                type="text"
-                value={noteTitle}
-                onChange={(e) => setNoteTitle(e.target.value)}
-                placeholder="Note Title"
-                className="w-full text-lg md:text-xl font-medium mb-4 border-b border-gray-300 pb-2 focus:outline-none focus:border-blue-500 bg-transparent"
-              />
-              
-              {/* Tags Section */}
-              <div className="mb-4 flex flex-wrap items-center gap-2">
-                {selectedTags.map((tag) => (
-                  <div 
-                    key={tag.name} 
-                    // Slightly larger padding and font for tags
-                    className={`bg-${tag.color}-100 text-${tag.color}-900 px-2.5 py-1 rounded-full text-xs font-medium flex items-center shadow-sm`}
-                  >
-                    {tag.name}
-                    <button // Make remove button slightly larger/easier to tap
-                      className="ml-1.5 -mr-0.5 p-0.5 rounded-full text-${tag.color}-600 hover:bg-${tag.color}-200 focus:outline-none focus:ring-1 focus:ring-${tag.color}-400"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleRemoveTag(tag)
-                      }}
-                      aria-label={`Remove ${tag.name} tag`}
-                    >
-                      <X size={12} strokeWidth={3}/>
-                    </button>
                   </div>
-                ))}
-                 {/* Add Tag Button Dropdown */}
-                <div className="relative tag-dropdown-container">
-                  <button 
-                    className="text-gray-500 hover:text-gray-700 text-xs border border-dashed border-gray-300 px-3 py-1.5 rounded-full flex items-center gap-1 hover:border-gray-400 hover:bg-gray-50"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setShowTagDropdown(!showTagDropdown)
-                    }}
-                    aria-haspopup="true"
-                    aria-expanded={showTagDropdown}
-                  >
-                    <Tag size={12}/>
-                    <span>Add Tag</span>
-                    <ChevronDown size={12} className={`transition-transform duration-200 ${showTagDropdown ? 'rotate-180' : ''}`} />
-                  </button>
-                  
-                  {showTagDropdown && (
-                    <div className="absolute z-10 mt-2 w-48 bg-white rounded-md shadow-lg border border-gray-200 py-1 right-0">
-                      {AVAILABLE_TAGS
-                        .filter(tag => !selectedTags.some(t => t.name === tag.name))
-                        .map(tag => (
-                          <button
-                            key={tag.name}
-                            className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-100 flex items-center gap-2.5`}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleAddTag(tag)
-                            }}
-                          >
-                            <span className={`w-2.5 h-2.5 rounded-full bg-${tag.color}-500 flex-shrink-0`}></span>
-                            {tag.name}
-                          </button>
-                        ))
-                      }
-                      {AVAILABLE_TAGS.filter(tag => !selectedTags.some(t => t.name === tag.name)).length === 0 && (
-                        <span className="px-3 py-2 text-sm text-gray-500 block">No more tags</span>
-                      )}
-                    </div>
+              </header>
+
+             {/* Editor/Preview Area - Apply font size class dynamically */}
+             {/* Apply font size class dynamically */}
+             <main className={`flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-white dark:bg-gray-900 
+                             ${fontSize === 'sm' ? 'text-sm' : fontSize === 'lg' ? 'text-lg' : 'text-base'}`}>
+                  {/* Conditional Rendering based on editorViewMode */}
+                  {editorViewMode === 'editor' ? (
+                      <textarea
+                          value={noteContent}
+                          onChange={(e) => setNoteContent(e.target.value)}
+                          placeholder="Start writing..."
+                          // Removed text-lg, inherit from main. Adjusted line-height based on font size. Applied font family.
+                          className={`w-full h-full resize-none focus:outline-none bg-transparent dark:placeholder-gray-600 placeholder-gray-500 p-1 ${fontFamily === 'mono' ? 'font-mono' : 'font-sans'} 
+                                     ${fontSize === 'sm' ? 'leading-relaxed' : fontSize === 'lg' ? 'leading-loose' : 'leading-relaxed'}`} 
+                      />
+                  ) : (
+                      // Removed text-lg, inherit from main. Adjusted line-height. Applied font family and prose size.
+                      <div className={`prose dark:prose-invert max-w-none h-full overflow-y-auto p-1 ${fontFamily === 'mono' ? 'prose-mono' : ''} 
+                                      ${fontSize === 'sm' ? 'prose-sm leading-relaxed' : fontSize === 'lg' ? 'prose-lg leading-loose' : 'prose-base leading-relaxed'}`}> 
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{noteContent}</ReactMarkdown>
+                      </div>
                   )}
-                </div>
-              </div>
-              
-              {/* Editor/Preview Toggle Buttons */}
-              <div className="mb-2 border-b border-gray-200">
-                <nav className="-mb-px flex space-x-4" aria-label="Tabs">
-                  <button
-                    onClick={() => setEditorViewMode('editor')}
-                    className={`whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm ${
-                      editorViewMode === 'editor'
-                        ? 'border-blue-500 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    Editor
-                  </button>
-                  <button
-                    onClick={() => setEditorViewMode('preview')}
-                    className={`whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm ${
-                      editorViewMode === 'preview'
-                        ? 'border-blue-500 text-blue-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    Preview
-                  </button>
-                </nav>
-              </div>
+             </main>
 
-              {/* Editor & Preview Area - Conditionally Rendered */}
-              {/* Remove grid layout, make container flex-grow */}
-              <div className="flex-grow min-h-[300px]">
-                {/* Editor Column - Render only if mode is 'editor' */}
-                {editorViewMode === 'editor' && (
-                  <div className="flex flex-col h-full">
-                    {/* <label htmlFor="note-editor" className="text-xs font-medium text-gray-500 mb-1 uppercase tracking-wider">Editor (Markdown)</label> */}
-                    <textarea
-                      id="note-editor"
-                      value={noteContent}
-                      onChange={(e) => setNoteContent(e.target.value)}
-                      placeholder="Start typing your note..."
-                      className="w-full flex-grow resize-none focus:outline-none text-base leading-relaxed bg-gray-50 border border-gray-200 rounded-md p-3 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 font-mono h-full"
-                    />
+             {/* Footer (Word Count) - Styling should adapt via dark: variants */}
+              <footer className="p-2 text-xs text-gray-400 dark:text-gray-500 h-8 flex items-center justify-end flex-shrink-0 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700"> {/* Fixed height, subtle background */}
+                   <span>{noteContent.split(/\s+/).filter(Boolean).length} words, {noteContent.length} characters</span>
+              </footer>
+
+         </div>
+
+         {/* Modal Overlays (Keep existing modals, ensure they work with new layout) */}
+         {showTemplateModal && (
+             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40">
+                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md template-modal-content">
+                     <h3 className="text-lg font-medium mb-4">{isEditingTemplate ? 'Edit Template' : 'Add New Template'}</h3>
+                     <form onSubmit={handleSaveOrUpdateTemplate}>
+                         <div className="mb-4">
+                             <label htmlFor="templateName" className="block text-sm font-medium mb-1">Template Name</label>
+                             <input
+                                 type="text"
+                                 id="templateName"
+                                 value={templateFormName}
+                                 onChange={(e) => setTemplateFormName(e.target.value)}
+                                 required
+                                 className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                             />
+                         </div>
+                          <div className="mb-4">
+                             <label htmlFor="templateTitle" className="block text-sm font-medium mb-1">Default Title</label>
+                              <input
+                                 type="text"
+                                 id="templateTitle"
+                                 value={templateFormTitle}
+                                 onChange={(e) => setTemplateFormTitle(e.target.value)}
+                                 placeholder="e.g., Meeting Notes: [Topic]"
+                                 className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                             />
+                         </div>
+                         <div className="mb-4">
+                             <label htmlFor="templateContent" className="block text-sm font-medium mb-1">Content</label>
+                              <textarea
+                                 id="templateContent"
+                                 value={templateFormContent}
+                                 onChange={(e) => setTemplateFormContent(e.target.value)}
+                                 rows="6"
+                                 required
+                                 className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                 placeholder="Enter Markdown template content..."
+                             />
+                         </div>
+                         <div className="flex justify-end space-x-2">
+                             <button type="button" onClick={handleCancelTemplateModal} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                                 Cancel
+                             </button>
+                             <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                 {isEditingTemplate ? 'Update Template' : 'Save Template'}
+                             </button>
+                         </div>
+                     </form>
+                 </div>
+             </div>
+         )}
+
+         {/* Formatting Help Modal */}
+         {showFormattingHelpModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40">
+                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-lg relative">
+                     <button onClick={() => setShowFormattingHelpModal(false)} className="absolute top-2 right-2 p-1 rounded hover:bg-gray-200">
+                         <X size={20} />
+                     </button>
+                      <h3 className="text-lg font-medium mb-4">Markdown Formatting Help</h3>
+                      <div className="prose prose-sm dark:prose-invert max-w-none text-sm space-y-2">
+                         <p><code># Heading 1</code></p>
+                         <p><code>## Heading 2</code></p>
+                         <p><code>**Bold text**</code> or <code>__Bold text__</code></p>
+                         <p><code>*Italic text*</code> or <code>_Italic text_</code></p>
+                         <p><code>`Inline code`</code></p>
+                         <p><code>[Link text](https://example.com)</code></p>
+                         <p><code>![Alt text](image_url.jpg)</code></p>
+                         <p><code>- Unordered list item</code></p>
+                         <p><code>1. Ordered list item</code></p>
+                         <p><code>&gt; Blockquote</code></p>
+                         <p><code>---</code> or <code>***</code> for horizontal rule</p>
+                          <p><code>```python</code><br/><code># Code block</code><br/><code>print(\"Hello\")</code><br/><code>```</code></p>
+                          <p><code>- [ ] Task list item</code></p>
+                          <p><code>- [x] Completed task</code></p>
+                      </div>
                   </div>
-                )}
-                
-                {/* Preview Column - Render only if mode is 'preview' */}
-                {editorViewMode === 'preview' && (
-                  <div className="h-full overflow-y-auto border border-gray-200 rounded-md p-3 bg-white">
-                    {/* <label className="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wider">Preview</label> */}
-                    <div className="prose prose-sm max-w-none">
-                      <ReactMarkdown 
-                        remarkPlugins={[remarkGfm]} // Enable GitHub Flavored Markdown
-                      >
-                        {noteContent || "*Preview will appear here...*"}
-                      </ReactMarkdown>
-                    </div>
-                  </div>
-                )}
-              </div>
-              
-              {/* Editor Toolbar (Optional) - Placed below editor/preview grid */}
-              <div className="border-t border-gray-200 pt-3 mt-4"> 
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex space-x-1"> 
-                    {/* Make buttons slightly larger for touch */}
-                    <button className="text-gray-500 hover:text-gray-800 p-2 rounded-lg hover:bg-gray-100 active:bg-gray-200">
-                      <PenLine size={18} />
-                    </button>
-                    {/* Add other buttons similarly */}
-                    <button className="text-gray-500 hover:text-gray-800 p-2 rounded-lg hover:bg-gray-100 active:bg-gray-200">
-                      <Image size={18} />
-                    </button>
-                    <button className="text-gray-500 hover:text-gray-800 p-2 rounded-lg hover:bg-gray-100 active:bg-gray-200">
-                      <Mic size={18} />
-                    </button>
-                    <button className="text-gray-500 hover:text-gray-800 p-2 rounded-lg hover:bg-gray-100 active:bg-gray-200">
-                      <Upload size={18} />
-                    </button>
-                  </div>
-                  
-                  {/* Removed "Maps to:" section for brevity, can be added back if needed */}
-                   <button className="text-gray-500 hover:text-gray-800 p-2 rounded-lg hover:bg-gray-100 active:bg-gray-200">
-                      <MoreVertical size={18} />
-                   </button>
-                </div>
-              </div>
             </div>
-          </main>
-            
-          {/* Footer / Save Area */}
-          {/* Use flex-col on mobile, flex-row on desktop. Adjust padding/spacing */}
-          <footer className="bg-white border-t border-gray-200 p-3 md:p-4">
-            <div className="max-w-3xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-4">
-              <div className="flex items-center w-full sm:w-auto">
-                <label htmlFor="category-select" className="text-sm text-gray-600 mr-2 whitespace-nowrap">Category:</label>
-                <select 
-                  id="category-select"
-                  className="w-full sm:w-auto text-sm border border-gray-300 rounded-md py-1.5 px-2 bg-gray-50 focus:ring-1 focus:ring-blue-500 focus:border-blue-500" // Added focus styles
-                  value={selectedCategory}
-                  onChange={handleCategoryChange}
-                >
-                  <option value="">Quick Note</option> {/* Use empty value for default */}
-                  <option>Meeting Notes</option>
-                  <option>Project Idea</option>
-                  <option>Task</option>
-                </select>
-              </div>
-              <button 
-                className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg text-sm font-medium shadow-sm disabled:opacity-60 flex items-center justify-center space-x-2"
-                onClick={handleSaveNote}
-                disabled={isSyncing || !isAuthenticated || (!noteTitle && !noteContent)} // Disable if not auth, syncing, or note is empty
-                title={!isAuthenticated ? "Connect to Notion to save" : (!noteTitle && !noteContent) ? "Add title or content to save" : "Save note"}
-              >
-                 {isSyncing ? <Loader2 size={16} className="animate-spin" /> : null}
-                 <span>Save Note</span> 
-              </button>
-            </div>
-          </footer>
-        </div>
-      </div>
+          )}
 
-      {/* Template Modal (for Add/Edit) */}
-      {showTemplateModal && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black bg-opacity-50 transition-opacity duration-300 ease-in-out">
-          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md m-4 template-modal-content">
-            <form onSubmit={handleSaveOrUpdateTemplate}>
-              <h3 className="text-lg font-medium mb-4 text-gray-800">
-                {isEditingTemplate ? 'Edit Custom Template' : 'Add Custom Template'}
-              </h3>
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor="templateName" className="block text-sm font-medium text-gray-700 mb-1">Template Name <span className="text-red-500">*</span></label>
-                  <input
-                    type="text"
-                    id="templateName"
-                    value={templateFormName}
-                    onChange={(e) => setTemplateFormName(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
-                    placeholder="e.g., Weekly Review"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="templateTitle" className="block text-sm font-medium text-gray-700 mb-1">Default Title Format</label>
-                  <input
-                    type="text"
-                    id="templateTitle"
-                    value={templateFormTitle}
-                    onChange={(e) => setTemplateFormTitle(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm"
-                    placeholder="e.g., Weekly Review - {date}"
-                  />
-                   <p className="text-xs text-gray-500 mt-1">You can use {'{new Date().toLocaleDateString()}'} for the current date.</p>
-                </div>
-                <div>
-                  <label htmlFor="templateContent" className="block text-sm font-medium text-gray-700 mb-1">Template Content (Markdown)</label>
-                  <textarea
-                    id="templateContent"
-                    rows="6"
-                    value={templateFormContent}
-                    onChange={(e) => setTemplateFormContent(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm font-mono"
-                    placeholder="### Section 1&#10;- Point A&#10;- Point B"
-                  ></textarea>
-                </div>
-              </div>
-              <div className="mt-6 flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={handleCancelTemplateModal}
-                  className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 text-sm font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
-                >
-                  {isEditingTemplate ? 'Update Template' : 'Save Template'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+          {/* Add other modals/popups here as needed */}
 
-      {/* Formatting Help Modal */}
-      {showFormattingHelpModal && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black bg-opacity-50 transition-opacity duration-300 ease-in-out">
-          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md m-4">
-            <h3 className="text-lg font-medium mb-4 text-gray-800">Markdown Formatting Help</h3>
-            <div className="prose prose-sm max-w-none text-gray-700 space-y-2">
-              <p>Use Markdown to format your notes:</p>
-              <ul>
-                <li><code># Heading 1</code></li>
-                <li><code>## Heading 2</code></li>
-                <li><code>**Bold Text**</code> or <code>__Bold Text__</code></li>
-                <li><code>*Italic Text*</code> or <code>_Italic Text_</code></li>
-                <li><code>- Unordered List Item</code></li>
-                <li><code>1. Ordered List Item</code></li>
-                <li><code>[Link Text](https://example.com)</code></li>
-                <li><code>`Inline Code`</code></li>
-                <li><pre><code>```\\nCode Block\\n```</code></pre></li>
-                <li><code>---</code> for a horizontal rule</li>
-              </ul>
-            </div>
-            <div className="mt-6 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setShowFormattingHelpModal(false)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-    </ErrorBoundary>
-  )
+       </div>
+     </ErrorBoundary>
+   )
 }

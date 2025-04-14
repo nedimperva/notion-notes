@@ -2,8 +2,6 @@ const CACHE_NAME = 'thought-base-v1';
 const urlsToCache = [
   '/',
   '/index.html',
-  '/assets/',
-  '/src/',
   '/manifest.json',
   '/favicon.ico'
 ];

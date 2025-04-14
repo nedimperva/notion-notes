@@ -10,7 +10,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<App />} />
-        <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path="/auth/notion/callback" element={<AuthCallback />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>

@@ -41,8 +41,39 @@ export default function AuthCallback() {
         const tokenData = await notionOAuth.exchangeCodeForToken(code)
         console.log('Token received:', tokenData)
 
-        // Redirect back to the main app
-        navigate('/')
+        // --- Fetch user info and databases AFTER getting token ---
+        if (tokenData.accessToken) {
+          console.log('Fetching user info and databases...');
+          setLoading(true); // Keep loading indicator while fetching
+          try {
+            const [userInfo, databasesData] = await Promise.all([
+              notionOAuth.getUserInfo(tokenData.accessToken),
+              notionOAuth.getDatabases(tokenData.accessToken) // Assumes getDatabases returns the structure expected by App.jsx
+            ]);
+            console.log('User info:', userInfo);
+            console.log('Databases data:', databasesData);
+
+            // --- Store EVERYTHING in localStorage ---
+            notionOAuth.setNotionAuth({
+              ...tokenData, // Include original token data (accessToken, workspaceId, etc.)
+              user: userInfo, // Add user info
+              databases: databasesData.results || [] // Add database list (ensure it's an array)
+            });
+            console.log('Stored combined auth, user, and db data.');
+            // Redirect back to the main app ONLY after storing everything
+            navigate('/');
+
+          } catch (fetchError) {
+            console.error('Error fetching user/db info after token exchange:', fetchError);
+            throw new Error(`Authentication succeeded, but failed to fetch user/database info: ${fetchError.message}`);
+          }
+        } else {
+           throw new Error('Token exchange failed, accessToken not received.');
+        }
+        // --- End fetch block ---
+
+        // Redirect back to the main app (MOVED into the try block above)
+        // navigate('/')
       } catch (err) {
         console.error('Auth callback error:', err)
         setError(err.message)
