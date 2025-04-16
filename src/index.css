@@ -85,25 +85,26 @@ html.dark, :root.dark {
 }
 
 html.sepia, :root.sepia {
-  --color-primary: #ff8a65;
-  --color-primary-hover: #d84315;
-  --color-secondary: #d84315;
-  --color-secondary-hover: #bf360c;
-  --color-background: #f4ecd8;
+  --color-primary: #a67c52; /* Muted brown for sepia accent */
+  --color-primary-hover: #8d6741;
+  --color-secondary: #bfa980;
+  --color-secondary-hover: #a68b5b;
+  --color-background: #f4ecd8; /* Standard sepia background */
   --color-surface: #f9f6f1;
-  --color-text: #5b4636;
+  --color-text: #5b4636; /* Deep brown for text */
   --color-text-light: #8d7966;
   --color-border: #e0d3b8;
   --color-shadow: rgba(90, 70, 50, 0.08);
-  --color-success: #26a69a;
-  --color-success-hover: #00897b;
-  --color-warning: #D4AC2B;
-  --color-warning-hover: #C39B1A;
-  --color-danger: #B22727;
-  --color-danger-hover: #A11616;
-  --color-accent1: #bfa980;
-  --color-accent2: #a68b5b;
-  --color-accent3: #8d7966;
+  --color-success: #6b8e23; /* Olive green for success */
+  --color-success-hover: #4e6b1a;
+  --color-warning: #d4ac2b;
+  --color-warning-hover: #b7950b;
+  --color-danger: #b22727;
+  --color-danger-hover: #7a1818;
+  --color-accent1: #c9b99a;
+  --color-accent2: #bfa980;
+  --color-accent3: #a68b5b;
+  --color-text-on-primary: #fff;
 }
 
 .bg-background { background-color: var(--color-background) !important; }
