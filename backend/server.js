@@ -95,8 +95,12 @@ app.post('/api/notion/token', async (req, res) => {
         }
       });
 
-      console.log('Token exchange successful');
-      res.json(response.data);
+      console.log('Token exchange successful:', response.data);
+      if (response.data.access_token) {
+        res.json({ accessToken: response.data.access_token });
+      } else {
+        res.status(400).json({ error: 'No access token received', details: response.data });
+      }
     } catch (error) {
       console.error('Notion API error:', {
         message: error.message,

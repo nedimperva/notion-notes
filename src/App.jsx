@@ -793,7 +793,7 @@ export default function App() {
                   >
                     <option value="" disabled>Select Notion DB</option>
                     {databases.map(db => (
-                      <option key={db.id} value={db.id}>{db.title}</option>
+                      <option key={db.id} value={db.id}>{Array.isArray(db.title) ? (db.title[0]?.plain_text || 'Untitled') : (db.title || 'Untitled')}</option>
                     ))}
                   </select>
                 </div>
@@ -980,7 +980,7 @@ export default function App() {
                                        >
                                            <option value="" disabled>Select Notion DB</option>
                                            {databases.map(db => (
-                                               <option key={db.id} value={db.id}>{db.title}</option>
+                                               <option key={db.id} value={db.id}>{Array.isArray(db.title) ? (db.title[0]?.plain_text || 'Untitled') : (db.title || 'Untitled')}</option>
                                            ))}
                                        </select>
                                    )}
