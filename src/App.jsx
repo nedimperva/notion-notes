@@ -742,16 +742,10 @@ export default function App() {
            {/* Sidebar Footer - Notion Connection */}
           <div className="p-4 border-t border-gray-200 dark:border-gray-700">
             {isAuthenticated && userInfo ? (
-              <div className="flex items-center justify-between">
-                <span className="text-sm truncate flex items-center">
-                  {userInfo.avatar_url && (
-                    <img src={userInfo.avatar_url} alt="User Avatar" className="w-6 h-6 rounded-full mr-2" />
-                  )}
-                  {userInfo.person?.name || userInfo.name || userInfo.workspaceName || 'Notion'}
+              <div className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-white bg-gray-700 rounded-md hover:bg-gray-800 disabled:opacity-50">
+                <span className="text-sm truncate">
+                {userInfo.bot?.workspace_name}
                 </span>
-                <button onClick={handleDisconnect} className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700" title="Disconnect Notion">
-                  <LogOut size={16} />
-                </button>
               </div>
             ) : (
               <button onClick={handleConnect} disabled={isConnecting} className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-white bg-gray-700 rounded-md hover:bg-gray-800 disabled:opacity-50">
@@ -993,8 +987,8 @@ export default function App() {
                                    {isAuthenticated && userInfo ? (
                                        <div className="flex items-center justify-between mb-1">
                                            <span className="text-sm truncate flex items-center">
-                                               <img src={userInfo.avatar_url} alt="User Avatar" className="w-5 h-5 rounded-full mr-2" />
-                                               {userInfo.person?.name || userInfo.name || userInfo.workspaceName || 'Notion'}
+                                               <img src="/icons/icon.svg" alt="Notion Icon" className="w-5 h-5 rounded-full mr-2" />
+                                               {userInfo.bot?.workspace_name || userInfo.person?.name || userInfo.name || 'Notion'}
                                            </span>
                                            <button onClick={() => { handleDisconnect(); setShowMoreOptionsDropdown(false); }} className="text-xs text-red-600 hover:text-red-800" title="Disconnect Notion">
                                                Disconnect
