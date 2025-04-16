@@ -403,7 +403,7 @@ export default function App() {
     if (!selectedTags.some(t => t.name === tag.name)) {
       setSelectedTags([...selectedTags, tag])
     }
-    setShowTagDropdown(false)
+    // Do not close the dropdown here for multi-select
   }
 
   const handleRemoveTag = (tagToRemove) => {
@@ -748,22 +748,21 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      {/* Main container with flex layout - Added dark mode classes */}
-      <div className={`flex h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 ${fontFamily === 'mono' ? 'font-mono' : 'font-sans'}`}>
+      {/* Main container with flex layout - Updated classes */}
+      <div className={`flex h-screen bg-background text-main ${fontFamily === 'mono' ? 'font-mono' : 'font-sans'}`}>
 
-        {/* Sidebar (No major changes here, styling is mostly self-contained) */}
-        <div className={`fixed inset-y-0 left-0 transform ${showSidebar ? 'translate-x-0' : '-translate-x-full'} w-64 bg-gray-50 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-transform duration-300 ease-in-out z-30 flex flex-col`}>
-          <div className="p-4 flex justify-between items-center border-b border-gray-200 dark:border-gray-700">
+        {/* Sidebar */}
+        <div className={`fixed inset-y-0 left-0 transform ${showSidebar ? 'translate-x-0' : '-translate-x-full'} w-64 bg-surface border-r border-main transition-transform duration-300 ease-in-out z-30 flex flex-col`}>
+          <div className="p-4 flex justify-between items-center border-b border-main">
             <h2 className="text-lg font-semibold">Notes</h2>
-            <button onClick={closeSidebar} className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700">
+            <button onClick={closeSidebar} className="p-1 rounded hover:bg-accent1">
               <X size={20} />
             </button>
           </div>
           <div className="flex-grow overflow-y-auto p-4 space-y-2">
-            <button onClick={handleNewNoteAndCloseSidebar} className="w-full flex items-center justify-center px-3 py-2 mb-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            <button onClick={handleNewNoteAndCloseSidebar} className="w-full flex items-center justify-center px-3 py-2 mb-2 text-sm font-medium text-white bg-primary rounded-md hover:bg-primaryHover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primaryHover">
               <PlusCircle size={16} className="mr-1" /> New Note
             </button>
-            {/* Filter notes to show only unsynced ones before sorting and mapping */}
             {notes
               .filter(note => !note.synced)
               .sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified))
@@ -771,7 +770,7 @@ export default function App() {
               <div
                 key={note.id}
                 onClick={() => handleSelectNoteAndCloseSidebar(note)}
-                className={`p-2 rounded cursor-pointer ${currentNoteId === note.id ? 'bg-indigo-100 dark:bg-indigo-900' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                className={`p-2 rounded cursor-pointer ${currentNoteId === note.id ? 'bg-primaryLight' : 'hover:bg-accent1'}`}
               >
                 <h3 className="font-medium truncate">{note.title || "Untitled Note"}</h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{note.content ? note.content.substring(0, 50) + '...' : 'Empty note'}</p>
@@ -779,8 +778,8 @@ export default function App() {
               </div>
             ))}
           </div>
-           {/* Sidebar Footer - Notion Connection */}
-          <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+          {/* Sidebar Footer - Notion Connection */}
+          <div className="p-4 border-t border-main">
             {isAuthenticated && userInfo ? (
               <div className="w-full flex flex-col items-center justify-center px-3 py-2 text-sm font-medium text-white bg-gray-700 rounded-md hover:bg-gray-800 disabled:opacity-50">
                 <span className="text-sm truncate">
@@ -796,22 +795,22 @@ export default function App() {
                 )}
               </div>
             ) : (
-              <button onClick={handleConnect} disabled={isConnecting} className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-white bg-gray-700 rounded-md hover:bg-gray-800 disabled:opacity-50">
+              <button onClick={handleConnect} disabled={isConnecting} className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-white bg-accent2 rounded-md hover:bg-accent3 disabled:opacity-50">
                 {isConnecting ? <Loader2 className="animate-spin mr-2" size={16} /> : null}
                 Connect to Notion
               </button>
             )}
-            {connectionError && <p className="text-xs text-red-500 mt-1">{connectionError}</p>}
+            {connectionError && <p className="text-xs text-danger mt-1">{connectionError}</p>}
           </div>
         </div>
 
          {/* Main content area */}
-        <div className="flex-1 flex flex-col transition-all duration-300 ease-in-out overflow-hidden"> {/* Added overflow-hidden */}
-           {/* Header - Adjusted padding and height */}
-           <header className="flex items-center justify-between p-2 border-b border-gray-200 dark:border-gray-700 h-12 flex-shrink-0">
+        <div className="flex-1 flex flex-col transition-all duration-300 ease-in-out overflow-hidden">
+           {/* Header */}
+           <header className="flex items-center justify-between p-2 border-b border-main h-12 flex-shrink-0 bg-surface">
               {/* Left side: Menu toggle and Title */}
-              <div className="flex items-center flex-grow min-w-0"> 
-                <button onClick={toggleSidebar} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 mr-2 flex-shrink-0">
+              <div className="flex items-center flex-grow min-w-0">
+                <button onClick={toggleSidebar} className="p-2 rounded hover:bg-accent1 mr-2 flex-shrink-0">
                   <Menu size={20} />
                 </button>
                  <input
@@ -829,14 +828,14 @@ export default function App() {
                 <div className="flex items-center border border-gray-300 dark:border-gray-600 rounded-md">
                      <button
                         onClick={() => setEditorViewMode('editor')}
-                        className={`px-2 py-1 text-xs rounded-l-md ${editorViewMode === 'editor' ? 'bg-indigo-100 dark:bg-indigo-800' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                        className={`px-2 py-1 text-xs rounded-l-md ${editorViewMode === 'editor' ? 'bg-primaryLight' : 'hover:bg-accent1'}`}
                         title="Edit Mode"
                     >
                          <Code size={14} />
                     </button>
                      <button
                         onClick={() => setEditorViewMode('preview')}
-                        className={`px-2 py-1 text-xs rounded-r-md ${editorViewMode === 'preview' ? 'bg-indigo-100 dark:bg-indigo-800' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}`}
+                        className={`px-2 py-1 text-xs rounded-r-md ${editorViewMode === 'preview' ? 'bg-primaryLight' : 'hover:bg-accent1'}`}
                         title="Preview Mode"
                     >
                          <Eye size={14} />
@@ -845,15 +844,15 @@ export default function App() {
 
                  {/* Tag Selection - now always visible */}
                  <div className="relative tag-dropdown-container">
-                   <button onClick={() => setShowTagDropdown(!showTagDropdown)} className="px-2 py-1 text-xs rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center">
+                   <button onClick={() => setShowTagDropdown(!showTagDropdown)} className="px-2 py-1 text-xs rounded bg-primary text-[var(--color-text-on-primary)] hover:bg-primaryHover flex items-center">
                      <Tag size={14} className="mr-1" /> Tags
                      {selectedTags.length > 0 && (
-                       <span className="ml-1 text-xs font-semibold text-indigo-600">({selectedTags.length})</span>
+                       <span className="ml-1 text-xs font-semibold text-[var(--color-text-on-primary)]">({selectedTags.length})</span>
                      )}
                      <ChevronDown size={14} className={`ml-1 transition-transform ${showTagDropdown ? 'rotate-180' : ''}`} />
                    </button>
                    {showTagDropdown && (
-                     <div className="absolute right-0 mt-1 w-56 bg-white dark:bg-gray-800 rounded-md shadow-lg py-2 z-30 border border-gray-200 dark:border-gray-700">
+                     <div className="absolute right-0 mt-1 w-56 bg-surface rounded-md shadow-lg py-2 z-30 border border-main">
                        <div className="px-3 pb-2">
                          {selectedTags.length > 0 ? (
                            <div className="flex flex-wrap gap-1">
@@ -870,13 +869,13 @@ export default function App() {
                            <span className="text-xs text-gray-400">No tags selected</span>
                          )}
                        </div>
-                       <div className="border-t border-gray-200 dark:border-gray-700 pt-2 px-3">
+                       <div className="border-t border-main pt-2 px-3">
                          <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Add Tag</div>
                          {TAGS.filter(at => !selectedTags.some(st => st.name === at.name)).map(tag => (
                            <button
                              key={tag.name}
                              onClick={() => handleAddTag(tag)}
-                             className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center"
+                             className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-accent1 flex items-center"
                            >
                              <span className={`w-2.5 h-2.5 rounded-full mr-2 ${tag.color.split(' ')[0]}`}></span>
                              {tag.name}
@@ -892,22 +891,22 @@ export default function App() {
 
                  {/* Template Selection - now always visible */}
                  <div className="relative template-dropdown-container">
-                   <button onClick={() => setShowTemplateDropdown(!showTemplateDropdown)} className="px-2 py-1 text-xs rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center">
+                   <button onClick={() => setShowTemplateDropdown(!showTemplateDropdown)} className="px-2 py-1 text-xs rounded bg-primary text-[var(--color-text-on-primary)] hover:bg-primaryHover flex items-center">
                      <FileText size={14} className="mr-1" /> Templates
                      <ChevronDown size={14} className={`ml-1 transition-transform ${showTemplateDropdown ? 'rotate-180' : ''}`} />
                    </button>
                    {showTemplateDropdown && (
-                     <div className="absolute right-0 mt-1 w-56 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-30 border border-gray-200 dark:border-gray-700">
-                       <button onClick={handleOpenAddTemplateModal} className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center">
+                     <div className="absolute right-0 mt-1 w-56 bg-surface rounded-md shadow-lg py-1 z-30 border border-main">
+                       <button onClick={handleOpenAddTemplateModal} className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-accent1 flex items-center">
                          <PlusCircle size={14} className="mr-2 flex-shrink-0" /> Add New Template
                        </button>
                        {(Array.isArray(customTemplates) ? customTemplates : []).map((template, index) => (
-                         <div key={index} className="flex items-center justify-between px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 group">
+                         <div key={index} className="flex items-center justify-between px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-accent1 group">
                            <span onClick={() => handleApplyTemplate(template)} className="flex-grow cursor-pointer truncate">{template.name}</span>
-                           <button onClick={() => handleOpenEditTemplateModal(index)} className="ml-2 opacity-0 group-hover:opacity-100 text-gray-500 hover:text-indigo-600" title="Edit Template">
+                           <button onClick={() => handleOpenEditTemplateModal(index)} className="ml-2 opacity-0 group-hover:opacity-100 text-gray-500 hover:text-primary" title="Edit Template">
                              <Edit size={12} className="flex-shrink-0" />
                            </button>
-                           <button onClick={() => handleDeleteTemplate(index)} className="ml-2 opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700" title="Delete Template">
+                           <button onClick={() => handleDeleteTemplate(index)} className="ml-2 opacity-0 group-hover:opacity-100 text-danger hover:text-dangerHover" title="Delete Template">
                              <X size={12} className="flex-shrink-0" />
                            </button>
                          </div>
@@ -920,7 +919,7 @@ export default function App() {
                  <button 
                     onClick={handleSyncCurrentNote}
                     disabled={!isOnline || !isAuthenticated || !currentNoteId || isSyncing || notes.find(n => n.id === currentNoteId)?.synced}
-                    className="p-2 rounded text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="p-2 rounded text-gray-600 dark:text-gray-400 hover:bg-accent1 disabled:opacity-50 disabled:cursor-not-allowed"
                     title={!isAuthenticated ? "Connect to Notion first" : !isOnline ? "Cannot sync while offline" : !currentNoteId ? "Select a note to sync" : notes.find(n => n.id === currentNoteId)?.synced ? "Note is synced" : "Sync note to Notion"}
                  >
                     {isSyncing ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
@@ -933,34 +932,34 @@ export default function App() {
 
                  {/* More Options Dropdown */}
                  <div className="relative more-options-dropdown-container">
-                    <button onClick={() => setShowMoreOptionsDropdown(!showMoreOptionsDropdown)} className="p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700">
+                    <button onClick={() => setShowMoreOptionsDropdown(!showMoreOptionsDropdown)} className="p-2 rounded hover:bg-accent1">
                          <MoreVertical size={20} />
                      </button>
                      {showMoreOptionsDropdown && (
-                          <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-20 border border-gray-200 dark:border-gray-700 max-h-[80vh] overflow-y-auto">
+                          <div className="absolute right-0 mt-2 w-64 bg-surface rounded-md shadow-lg py-1 z-20 border border-main max-h-[80vh] overflow-y-auto">
                                {/* Theme, Font, Font Size, Notion, etc. (remove Tag/Template sections from here) */}
-                               <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+                               <div className="px-4 py-2 border-b border-main">
                                    <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">Theme</h4>
                                    <div className="flex items-center justify-between space-x-1">
-                                       <button onClick={() => handleThemeChange('light')} className={`flex-1 text-xs py-1 px-2 rounded ${theme === 'light' ? 'bg-indigo-100 dark:bg-indigo-800' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}`}>Light</button>
-                                       <button onClick={() => handleThemeChange('dark')} className={`flex-1 text-xs py-1 px-2 rounded ${theme === 'dark' ? 'bg-indigo-100 dark:bg-indigo-800' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}`}>Night</button>
-                                       <button onClick={() => handleThemeChange('sepia')} className={`flex-1 text-xs py-1 px-2 rounded ${theme === 'sepia' ? 'bg-indigo-100 dark:bg-indigo-800' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}`}>Sepia</button>
+                                       <button onClick={() => handleThemeChange('light')} className={`flex-1 text-xs py-1 px-2 rounded ${theme === 'light' ? 'bg-primaryLight' : 'hover:bg-accent1'}`}>Light</button>
+                                       <button onClick={() => handleThemeChange('dark')} className={`flex-1 text-xs py-1 px-2 rounded ${theme === 'dark' ? 'bg-primaryLight' : 'hover:bg-accent1'}`}>Night</button>
+                                       <button onClick={() => handleThemeChange('sepia')} className={`flex-1 text-xs py-1 px-2 rounded ${theme === 'sepia' ? 'bg-primaryLight' : 'hover:bg-accent1'}`}>Sepia</button>
                                    </div>
                                </div>
 
-                               <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+                               <div className="px-4 py-2 border-b border-main">
                                    <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">Font Family</h4>
                                    <div className="flex items-center border border-gray-300 dark:border-gray-600 rounded-md w-full">
                                        <button
                                            onClick={() => handleFontChange('sans')}
-                                           className={`flex-1 px-2 py-1 text-xs rounded-l-md ${fontFamily === 'sans' ? 'bg-indigo-100 dark:bg-indigo-800' : 'hover:bg-gray-100 dark:hover:bg-gray-700'} flex items-center justify-center space-x-1`}
+                                           className={`flex-1 px-2 py-1 text-xs rounded-l-md ${fontFamily === 'sans' ? 'bg-primaryLight' : 'hover:bg-accent1'} flex items-center justify-center space-x-1`}
                                            title="Sans Serif Font"
                                        >
                                           <span>Sans</span>
                                        </button>
                                        <button
                                            onClick={() => handleFontChange('mono')}
-                                           className={`flex-1 px-2 py-1 text-xs rounded-r-md ${fontFamily === 'mono' ? 'bg-indigo-100 dark:bg-indigo-800' : 'hover:bg-gray-100 dark:hover:bg-gray-700'} flex items-center justify-center space-x-1`}
+                                           className={`flex-1 px-2 py-1 text-xs rounded-r-md ${fontFamily === 'mono' ? 'bg-primaryLight' : 'hover:bg-accent1'} flex items-center justify-center space-x-1`}
                                            title="Monospace Font"
                                        >
                                            <span>Mono</span>
@@ -968,26 +967,26 @@ export default function App() {
                                    </div>
                                </div>
 
-                               <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+                               <div className="px-4 py-2 border-b border-main">
                                    <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">Font Size</h4>
                                    <div className="flex items-center border border-gray-300 dark:border-gray-600 rounded-md w-full">
                                        <button
                                            onClick={() => handleFontSizeChange('sm')}
-                                           className={`flex-1 px-2 py-1 text-xs rounded-l-md ${fontSize === 'sm' ? 'bg-indigo-100 dark:bg-indigo-800' : 'hover:bg-gray-100 dark:hover:bg-gray-700'} flex items-center justify-center`}
+                                           className={`flex-1 px-2 py-1 text-xs rounded-l-md ${fontSize === 'sm' ? 'bg-primaryLight' : 'hover:bg-accent1'} flex items-center justify-center`}
                                            title="Small Font Size"
                                        >
                                           Small
                                        </button>
                                        <button
                                            onClick={() => handleFontSizeChange('base')}
-                                           className={`flex-1 px-2 py-1 text-xs border-l border-r border-gray-300 dark:border-gray-600 ${fontSize === 'base' ? 'bg-indigo-100 dark:bg-indigo-800' : 'hover:bg-gray-100 dark:hover:bg-gray-700'} flex items-center justify-center`}
+                                           className={`flex-1 px-2 py-1 text-xs border-l border-r border-gray-300 dark:border-gray-600 ${fontSize === 'base' ? 'bg-primaryLight' : 'hover:bg-accent1'} flex items-center justify-center`}
                                            title="Medium Font Size"
                                        >
                                           Medium
                                        </button>
                                        <button
                                            onClick={() => handleFontSizeChange('lg')}
-                                           className={`flex-1 px-2 py-1 text-xs rounded-r-md ${fontSize === 'lg' ? 'bg-indigo-100 dark:bg-indigo-800' : 'hover:bg-gray-100 dark:hover:bg-gray-700'} flex items-center justify-center`}
+                                           className={`flex-1 px-2 py-1 text-xs rounded-r-md ${fontSize === 'lg' ? 'bg-primaryLight' : 'hover:bg-accent1'} flex items-center justify-center`}
                                            title="Large Font Size"
                                        >
                                           Large
@@ -995,19 +994,19 @@ export default function App() {
                                    </div>
                                </div>
 
-                               <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+                               <div className="px-4 py-2 border-b border-main">
                                   <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">View Mode</h4>
                                   <div className="flex items-center border border-gray-300 dark:border-gray-600 rounded-md w-full">
                                       <button
                                           onClick={() => { setEditorViewMode('editor'); setShowMoreOptionsDropdown(false); }}
-                                          className={`flex-1 px-2 py-1 text-xs rounded-l-md ${editorViewMode === 'editor' ? 'bg-indigo-100 dark:bg-indigo-800' : 'hover:bg-gray-100 dark:hover:bg-gray-700'} flex items-center justify-center space-x-1`}
+                                          className={`flex-1 px-2 py-1 text-xs rounded-l-md ${editorViewMode === 'editor' ? 'bg-primaryLight' : 'hover:bg-accent1'} flex items-center justify-center space-x-1`}
                                           title="Edit Mode"
                                       >
                                           <Code size={14} /> <span>Editor</span>
                                       </button>
                                       <button
                                           onClick={() => { setEditorViewMode('preview'); setShowMoreOptionsDropdown(false); }}
-                                          className={`flex-1 px-2 py-1 text-xs rounded-r-md ${editorViewMode === 'preview' ? 'bg-indigo-100 dark:bg-indigo-800' : 'hover:bg-gray-100 dark:hover:bg-gray-700'} flex items-center justify-center space-x-1`}
+                                          className={`flex-1 px-2 py-1 text-xs rounded-r-md ${editorViewMode === 'preview' ? 'bg-primaryLight' : 'hover:bg-accent1'} flex items-center justify-center space-x-1`}
                                           title="Preview Mode"
                                       >
                                           <Eye size={14} /> <span>Preview</span>
@@ -1015,7 +1014,7 @@ export default function App() {
                                   </div>
                               </div>
 
-                               <div className="px-4 py-2 border-b border-gray-200 dark:border-gray-700">
+                               <div className="px-4 py-2 border-b border-main">
                                    <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">Notion</h4>
                                    {isAuthenticated && userInfo ? (
                                        <div className="flex items-center justify-between mb-1">
@@ -1023,22 +1022,22 @@ export default function App() {
                                                <img src="/icons/icon.svg" alt="Notion Icon" className="w-5 h-5 rounded-full mr-2" />
                                                {userInfo.bot?.workspace_name || userInfo.person?.name || userInfo.name || 'Notion'}
                                            </span>
-                                           <button onClick={() => { handleDisconnect(); setShowMoreOptionsDropdown(false); }} className="text-xs text-red-600 hover:text-red-800" title="Disconnect Notion">
+                                           <button onClick={() => { handleDisconnect(); setShowMoreOptionsDropdown(false); }} className="text-xs text-danger hover:text-dangerHover" title="Disconnect Notion">
                                                Disconnect
                                            </button>
                                        </div>
                                    ) : (
-                                       <button onClick={() => { handleConnect(); setShowMoreOptionsDropdown(false); }} disabled={isConnecting} className="w-full flex items-center justify-center px-2 py-1 text-sm font-medium text-white bg-gray-700 rounded hover:bg-gray-800 disabled:opacity-50">
+                                       <button onClick={() => { handleConnect(); setShowMoreOptionsDropdown(false); }} disabled={isConnecting} className="w-full flex items-center justify-center px-2 py-1 text-sm font-medium text-white bg-accent2 rounded hover:bg-accent3 disabled:opacity-50">
                                            {isConnecting ? <Loader2 className="animate-spin mr-1" size={14} /> : null}
                                            Connect to Notion
                                        </button>
                                    )}
-                                   {connectionError && <p className="text-xs text-red-500 mt-1">{connectionError}</p>}
+                                   {connectionError && <p className="text-xs text-danger mt-1">{connectionError}</p>}
                                    {isAuthenticated && databases.length > 0 && (
                                        <select
                                            value={selectedDatabase || ''}
                                            onChange={(e) => setSelectedDatabase(e.target.value)}
-                                           className="w-full text-xs p-1 mt-2 border border-gray-300 rounded bg-white dark:bg-gray-700 dark:border-gray-600 focus:ring-indigo-500 focus:border-indigo-500"
+                                           className="w-full text-xs p-1 mt-2 border border-gray-300 rounded bg-white dark:bg-gray-700 dark:border-gray-600 focus:ring-primary focus:border-primary"
                                        >
                                            <option value="" disabled>Select Notion DB</option>
                                            {databases.map(db => (
@@ -1049,10 +1048,10 @@ export default function App() {
                                </div>
 
                                <div className="px-4 py-2">
-                                   <button onClick={() => { setShowFormattingHelpModal(true); setShowMoreOptionsDropdown(false); }} className="w-full text-left px-2 py-1 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center">
+                                   <button onClick={() => { setShowFormattingHelpModal(true); setShowMoreOptionsDropdown(false); }} className="w-full text-left px-2 py-1 text-sm text-gray-700 dark:text-gray-300 hover:bg-accent1 rounded flex items-center">
                                        <BookOpen size={14} className="mr-2" /> Formatting Help
                                    </button>
-                                    <button className="w-full text-left px-2 py-1 text-sm text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 rounded flex items-center cursor-not-allowed" title="Settings (coming soon)">
+                                    <button className="w-full text-left px-2 py-1 text-sm text-gray-400 dark:text-gray-500 hover:bg-accent1 rounded flex items-center cursor-not-allowed" title="Settings (coming soon)">
                                        <Settings size={14} className="mr-2" /> Settings
                                    </button>
                                </div>
@@ -1062,7 +1061,7 @@ export default function App() {
                   </div>
               </header>
 
-             <main className={`flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-white dark:bg-gray-900 
+             <main className={`flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-background 
                              ${fontSize === 'sm' ? 'text-sm' : fontSize === 'lg' ? 'text-lg' : 'text-base'}`}>
                   {editorViewMode === 'editor' ? (
                       <textarea
@@ -1080,7 +1079,7 @@ export default function App() {
                   )}
              </main>
 
-              <footer className="p-2 text-xs text-gray-400 dark:text-gray-500 h-8 flex items-center justify-end flex-shrink-0 bg-gray-50 dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+              <footer className="p-2 text-xs text-gray-400 dark:text-gray-500 h-8 flex items-center justify-end flex-shrink-0 bg-surface border-t border-main">
                    <span>{noteContent.split(/\s+/).filter(Boolean).length} words, {noteContent.length} characters</span>
               </footer>
 
@@ -1088,7 +1087,7 @@ export default function App() {
 
          {showTemplateModal && (
              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40">
-                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md template-modal-content">
+                 <div className="bg-surface rounded-lg shadow-xl p-6 w-full max-w-md template-modal-content">
                      <h3 className="text-lg font-medium mb-4">{isEditingTemplate ? 'Edit Template' : 'Add New Template'}</h3>
                      <form onSubmit={handleSaveOrUpdateTemplate}>
                          <div className="mb-4">
@@ -1099,7 +1098,7 @@ export default function App() {
                                  value={templateFormName}
                                  onChange={(e) => setTemplateFormName(e.target.value)}
                                  required
-                                 className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                 className="w-full px-3 py-2 border border-main rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
                              />
                          </div>
                           <div className="mb-4">
@@ -1110,7 +1109,7 @@ export default function App() {
                                  value={templateFormTitle}
                                  onChange={(e) => setTemplateFormTitle(e.target.value)}
                                  placeholder="e.g., Meeting Notes: [Topic]"
-                                 className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                 className="w-full px-3 py-2 border border-main rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
                              />
                          </div>
                          <div className="mb-4">
@@ -1121,15 +1120,15 @@ export default function App() {
                                  onChange={(e) => setTemplateFormContent(e.target.value)}
                                  rows="6"
                                  required
-                                 className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                 className="w-full px-3 py-2 border border-main rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
                                  placeholder="Enter Markdown template content..."
                              />
                          </div>
                          <div className="flex justify-end space-x-2">
-                             <button type="button" onClick={handleCancelTemplateModal} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50">
+                             <button type="button" onClick={handleCancelTemplateModal} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-main rounded-md hover:bg-gray-50">
                                  Cancel
                              </button>
-                             <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                             <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-primary border border-transparent rounded-md shadow-sm hover:bg-primaryHover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primaryHover">
                                  {isEditingTemplate ? 'Update Template' : 'Save Template'}
                              </button>
                          </div>
@@ -1140,8 +1139,8 @@ export default function App() {
 
          {showFormattingHelpModal && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40">
-                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-lg relative">
-                     <button onClick={() => setShowFormattingHelpModal(false)} className="absolute top-2 right-2 p-1 rounded hover:bg-gray-200">
+                 <div className="bg-surface rounded-lg shadow-xl p-6 w-full max-w-lg relative">
+                     <button onClick={() => setShowFormattingHelpModal(false)} className="absolute top-2 right-2 p-1 rounded hover:bg-accent1">
                          <X size={20} />
                      </button>
                       <h3 className="text-lg font-medium mb-4">Markdown Formatting Help</h3>
