@@ -782,10 +782,18 @@ export default function App() {
            {/* Sidebar Footer - Notion Connection */}
           <div className="p-4 border-t border-gray-200 dark:border-gray-700">
             {isAuthenticated && userInfo ? (
-              <div className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-white bg-gray-700 rounded-md hover:bg-gray-800 disabled:opacity-50">
+              <div className="w-full flex flex-col items-center justify-center px-3 py-2 text-sm font-medium text-white bg-gray-700 rounded-md hover:bg-gray-800 disabled:opacity-50">
                 <span className="text-sm truncate">
-                {userInfo.bot?.workspace_name}
+                  {userInfo.bot?.workspace_name}
                 </span>
+                {/* Display first database name if available */}
+                {databases.length > 0 && (
+                  <span className="mt-1 text-xs text-gray-300 truncate">
+                    {Array.isArray(databases[0].title)
+                      ? (databases[0].title[0]?.plain_text || 'Untitled DB')
+                      : (databases[0].title || 'Untitled DB')}
+                  </span>
+                )}
               </div>
             ) : (
               <button onClick={handleConnect} disabled={isConnecting} className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-white bg-gray-700 rounded-md hover:bg-gray-800 disabled:opacity-50">
@@ -794,21 +802,6 @@ export default function App() {
               </button>
             )}
             {connectionError && <p className="text-xs text-red-500 mt-1">{connectionError}</p>}
-             {/* Database Selector - simplified */}
-             {isAuthenticated && databases.length > 0 && (
-                <div className="mt-2">
-                  <select
-                    value={selectedDatabase || ''}
-                    onChange={(e) => setSelectedDatabase(e.target.value)}
-                    className="w-full text-xs p-1 border border-gray-300 rounded bg-white dark:bg-gray-700 dark:border-gray-600 focus:ring-indigo-500 focus:border-indigo-500"
-                  >
-                    <option value="" disabled>Select Notion DB</option>
-                    {databases.map(db => (
-                      <option key={db.id} value={db.id}>{Array.isArray(db.title) ? (db.title[0]?.plain_text || 'Untitled') : (db.title || 'Untitled')}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
           </div>
         </div>
 
