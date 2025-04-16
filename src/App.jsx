@@ -744,8 +744,10 @@ export default function App() {
             {isAuthenticated && userInfo ? (
               <div className="flex items-center justify-between">
                 <span className="text-sm truncate flex items-center">
-                   <img src={userInfo.avatar_url} alt="User Avatar" className="w-6 h-6 rounded-full mr-2" />
-                   {userInfo.name}
+                  {userInfo.avatar_url && (
+                    <img src={userInfo.avatar_url} alt="User Avatar" className="w-6 h-6 rounded-full mr-2" />
+                  )}
+                  {userInfo.person?.name || userInfo.name || userInfo.workspaceName || 'Notion'}
                 </span>
                 <button onClick={handleDisconnect} className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700" title="Disconnect Notion">
                   <LogOut size={16} />
@@ -818,36 +820,47 @@ export default function App() {
                  <div className="relative tag-dropdown-container">
                    <button onClick={() => setShowTagDropdown(!showTagDropdown)} className="px-2 py-1 text-xs rounded bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center">
                      <Tag size={14} className="mr-1" /> Tags
+                     {selectedTags.length > 0 && (
+                       <span className="ml-1 text-xs font-semibold text-indigo-600">({selectedTags.length})</span>
+                     )}
                      <ChevronDown size={14} className={`ml-1 transition-transform ${showTagDropdown ? 'rotate-180' : ''}`} />
                    </button>
                    {showTagDropdown && (
-                     <div className="absolute right-0 mt-1 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-30 border border-gray-200 dark:border-gray-700">
-                       {TAGS.filter(at => !selectedTags.some(st => st.name === at.name)).map(tag => (
-                         <button
-                           key={tag.name}
-                           onClick={() => handleAddTag(tag)}
-                           className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center"
-                         >
-                           <span className={`w-2.5 h-2.5 rounded-full mr-2 ${tag.color.split(' ')[0]}`}></span>
-                           {tag.name}
-                         </button>
-                       ))}
-                       {TAGS.filter(at => !selectedTags.some(st => st.name === at.name)).length === 0 && (
-                         <p className="px-3 py-1.5 text-sm text-gray-500 dark:text-gray-400">No more tags</p>
-                       )}
+                     <div className="absolute right-0 mt-1 w-56 bg-white dark:bg-gray-800 rounded-md shadow-lg py-2 z-30 border border-gray-200 dark:border-gray-700">
+                       <div className="px-3 pb-2">
+                         {selectedTags.length > 0 ? (
+                           <div className="flex flex-wrap gap-1">
+                             {selectedTags.map(tag => (
+                               <span key={tag.name} className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${tag.color}`}>
+                                 {tag.name}
+                                 <button onClick={() => handleRemoveTag(tag)} className={`ml-1 flex-shrink-0 ${tag.color.split(' ')[1]} hover:text-${tag.color.split(' ')[1].replace('800', '700')} focus:outline-none`}>
+                                   <X size={10} strokeWidth={3}/>
+                                 </button>
+                               </span>
+                             ))}
+                           </div>
+                         ) : (
+                           <span className="text-xs text-gray-400">No tags selected</span>
+                         )}
+                       </div>
+                       <div className="border-t border-gray-200 dark:border-gray-700 pt-2 px-3">
+                         <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Add Tag</div>
+                         {TAGS.filter(at => !selectedTags.some(st => st.name === at.name)).map(tag => (
+                           <button
+                             key={tag.name}
+                             onClick={() => handleAddTag(tag)}
+                             className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center"
+                           >
+                             <span className={`w-2.5 h-2.5 rounded-full mr-2 ${tag.color.split(' ')[0]}`}></span>
+                             {tag.name}
+                           </button>
+                         ))}
+                         {TAGS.filter(at => !selectedTags.some(st => st.name === at.name)).length === 0 && (
+                           <p className="px-3 py-1.5 text-sm text-gray-500 dark:text-gray-400">No more tags</p>
+                         )}
+                       </div>
                      </div>
                    )}
-                   {/* Show selected tags inline */}
-                   <div className="flex flex-wrap gap-1 ml-2">
-                     {selectedTags.map(tag => (
-                       <span key={tag.name} className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${tag.color}`}>
-                         {tag.name}
-                         <button onClick={() => handleRemoveTag(tag)} className={`ml-1 flex-shrink-0 ${tag.color.split(' ')[1]} hover:text-${tag.color.split(' ')[1].replace('800', '700')} focus:outline-none`}>
-                           <X size={10} strokeWidth={3}/>
-                         </button>
-                       </span>
-                     ))}
-                   </div>
                  </div>
 
                  {/* Template Selection - now always visible */}
@@ -981,7 +994,7 @@ export default function App() {
                                        <div className="flex items-center justify-between mb-1">
                                            <span className="text-sm truncate flex items-center">
                                                <img src={userInfo.avatar_url} alt="User Avatar" className="w-5 h-5 rounded-full mr-2" />
-                                               {userInfo.name}
+                                               {userInfo.person?.name || userInfo.name || userInfo.workspaceName || 'Notion'}
                                            </span>
                                            <button onClick={() => { handleDisconnect(); setShowMoreOptionsDropdown(false); }} className="text-xs text-red-600 hover:text-red-800" title="Disconnect Notion">
                                                Disconnect
