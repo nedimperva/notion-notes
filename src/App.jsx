@@ -108,21 +108,61 @@ export default function App() {
   
   // Check authentication status on mount
   useEffect(() => {
-    const authData = localStorage.getItem('notionAuth')
-    if (authData) {
-      try { // Add try-catch for safer parsing
-        const parsedData = JSON.parse(authData);
-        // Provide defaults if keys are missing in localStorage
-        const user = parsedData.user || null;
-        const databases = parsedData.databases || []; // Default to empty array
+    const migrateNotionAuth = async (parsedData) => {
+      let needsMigration = false;
+      if (!parsedData.user || !parsedData.databases) {
+        needsMigration = true;
+      }
+      if (!parsedData.accessToken && parsedData.access_token) {
+        // Support both camelCase and snake_case
+        parsedData.accessToken = parsedData.access_token;
+        needsMigration = true;
+      }
+      if (needsMigration && parsedData.accessToken) {
+        try {
+          // Fetch user info and databases
+          const [userInfo, databasesData] = await Promise.all([
+            notionOAuth.getUserInfo(parsedData.accessToken),
+            notionOAuth.getDatabases(parsedData.accessToken)
+          ]);
+          const upgraded = {
+            ...parsedData,
+            user: userInfo,
+            databases: databasesData.results || []
+          };
+          localStorage.setItem('notionAuth', JSON.stringify(upgraded));
+          setUserInfo(userInfo);
+          setDatabases(databasesData.results || []);
+          setIsAuthenticated(true);
+          setNotionAuth(upgraded);
+          console.log('[Migration] Upgraded notionAuth in localStorage:', upgraded);
+          return;
+        } catch (err) {
+          console.error('[Migration] Failed to upgrade notionAuth:', err);
+          // Optionally clear invalid auth
+          localStorage.removeItem('notionAuth');
+          setIsAuthenticated(false);
+          setUserInfo(null);
+          setDatabases([]);
+          setNotionAuth(null);
+          return;
+        }
+      }
+      // If no migration needed, just set state as before
+      setUserInfo(parsedData.user || null);
+      setDatabases(parsedData.databases || []);
+      setIsAuthenticated(true);
+      setNotionAuth(parsedData);
+      console.log('Auth data loaded from localStorage:', parsedData);
+    };
 
-        setUserInfo(user);
-        setDatabases(databases); // Ensures state is always an array
-        setIsAuthenticated(true);
-        setNotionAuth(parsedData); // Store the whole parsed object
-        console.log('Auth data loaded from localStorage:', parsedData);
+    const authData = localStorage.getItem('notionAuth');
+    if (authData) {
+      try {
+        const parsedData = JSON.parse(authData);
+        migrateNotionAuth(parsedData);
       } catch (e) {
-        console.error("Failed to parse notionAuth from localStorage:", e);
+        console.error('Failed to parse notionAuth from localStorage:', e);
         // Clear corrupted data and reset state
         localStorage.removeItem('notionAuth');
         setIsAuthenticated(false);
@@ -131,7 +171,7 @@ export default function App() {
         setNotionAuth(null);
       }
     }
-  }, [])
+  }, []);
 
   // Online/offline detection
   useEffect(() => {
