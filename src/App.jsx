@@ -108,6 +108,8 @@ export default function App() {
   const autosaveTimerRef = useRef(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
   const [centeredEditor, setCenteredEditor] = useState(false);
+  // Add new state for setup instructions modal
+  const [showSetupInstructions, setShowSetupInstructions] = useState(false);
   
   // Check authentication status on mount
   useEffect(() => {
@@ -765,6 +767,19 @@ export default function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // After notion authentication
+  useEffect(() => {
+    const handleFirstTimeSetup = async () => {
+      const hasShownSetup = localStorage.getItem('hasShownNotionSetup');
+      if (isAuthenticated && !hasShownSetup) {
+        setShowSetupInstructions(true);
+        localStorage.setItem('hasShownNotionSetup', 'true');
+      }
+    };
+
+    handleFirstTimeSetup();
+  }, [isAuthenticated]);
+
   return (
     <ErrorBoundary>
       <div className={`flex h-screen bg-background text-main ${fontFamily === 'mono' ? 'font-mono' : 'font-sans'}`}> 
@@ -934,6 +949,18 @@ export default function App() {
           </header>
           )}
           <main className={`flex-1 overflow-y-auto p-0 bg-background ${fontSize === 'sm' ? 'text-sm' : fontSize === 'lg' ? 'text-lg' : 'text-base'}`}>
+            {/* Mobile Title Input */}
+            {isMobile && (
+              <div className="sticky top-0 z-10 bg-surface border-b border-main px-4 py-2">
+                <input
+                  type="text"
+                  value={noteTitle}
+                  onChange={(e) => setNoteTitle(e.target.value)}
+                  placeholder="Note Title"
+                  className="w-full text-base font-medium bg-transparent focus:outline-none focus:ring-0 border-none p-1 dark:placeholder-gray-600 placeholder-gray-400"
+                />
+              </div>
+            )}
             <div className={`h-full mx-auto transition-all duration-300 ease-in-out ${isFullWidth ? 'max-w-full' : 'max-w-4xl'}`}>
               {editorViewMode === 'editor' ? (
                 <div className="h-full bg-surface/80 dark:bg-surface/40 shadow-inner shadow-gray-300 dark:shadow-gray-900">
@@ -1155,13 +1182,94 @@ export default function App() {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
             <div className="bg-surface rounded-lg shadow-lg w-full max-w-2xl mx-4 max-h-[80vh] overflow-y-auto">
               <div className="p-4 border-b border-main flex justify-between items-center">
-                <h3 className="text-lg font-semibold">Markdown Formatting Guide</h3>
+                <h3 className="text-lg font-semibold">Formatting & Setup Guide</h3>
                 <button onClick={() => setShowFormattingHelpModal(false)} className="text-gray-500 hover:text-gray-700">
                   <X size={20} />
                 </button>
               </div>
+              <div className="p-4 space-y-6">
+                <div>
+                  <h4 className="text-base font-semibold mb-2">Notion Database Setup</h4>
+                  <div className="space-y-2 text-sm">
+                    <p>To sync notes with Notion, you need to set up your database with these <strong>mandatory</strong> properties or duplicate template provided while connecting your Notion account:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li><strong>Title</strong> (Title type) - Required: For note titles</li>
+                      <li><strong>Tags</strong> (Multi-select type) - Required: For note categorization</li>
+                      <li><strong>Category</strong> (Select type) - Required: For primary categorization</li>
+                    </ul>
+                    <p className="mt-2 text-gray-500">Additional recommended properties:</p>
+                    <ul className="list-disc pl-5 space-y-1 text-gray-500">
+                      <li><strong>Created</strong> (Date type) - For creation date </li>
+                      <li><strong>Last Edited</strong> (Date type) - For tracking changes</li>
+                    </ul>
+                  </div>
+                </div>
+                <div>
+                  <h4 className="text-base font-semibold mb-2">Markdown Formatting</h4>
+                  <div className="space-y-2 text-sm">
+                    <p>Basic Syntax:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li><code># Heading 1</code> - Large heading</li>
+                      <li><code>## Heading 2</code> - Medium heading</li>
+                      <li><code>### Heading 3</code> - Small heading</li>
+                      <li><code>**bold**</code> - <strong>Bold text</strong></li>
+                      <li><code>*italic*</code> - <em>Italic text</em></li>
+                      <li><code>[link](url)</code> - Hyperlink</li>
+                      <li><code>- item</code> - Bullet list</li>
+                      <li><code>1. item</code> - Numbered list</li>
+                      <li><code>- [ ] task</code> - Unchecked task</li>
+                      <li><code>- [x] task</code> - Checked task</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showSetupInstructions && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+            <div className="bg-surface rounded-lg shadow-lg w-full max-w-2xl mx-4">
+              <div className="p-4 border-b border-main flex justify-between items-center">
+                <h3 className="text-lg font-semibold">Welcome to ThoughtBase!</h3>
+                <button onClick={() => setShowSetupInstructions(false)} className="text-gray-500 hover:text-gray-700">
+                  <X size={20} />
+                </button>
+              </div>
               <div className="p-4 space-y-4">
-                {/* Add your markdown guide content here */}
+                <p>To get started with Notion sync, you'll need to set up a database with specific properties:</p>
+                <div className="bg-background p-4 rounded-md">
+                  <h4 className="font-semibold mb-2">Required Database Properties</h4>
+                  <ul className="list-disc pl-5 space-y-2">
+                    <li><strong>Title</strong> (Title type) - Required: For note titles</li>
+                    <li><strong>Tags</strong> (Multi-select type) - Required: For note categorization</li>
+                    <li><strong>Category</strong> (Select type) - Required: For primary categorization</li>
+                  </ul>
+                </div>
+                <div className="space-y-2">
+                  <p className="font-semibold">Steps to set up:</p>
+                  <ol className="list-decimal pl-5 space-y-2">
+                    <li>Create a new page in Notion</li>
+                    <li>Add a new database (full page)</li>
+                    <li>Add all the required properties listed above</li>
+                    <li>Make sure the database is shared with the integration</li>
+                    <li>Select your database in the app settings</li>
+                  </ol>
+                </div>
+                <div className="mt-6 flex justify-end space-x-3">
+                  <button
+                    onClick={() => setShowFormattingHelpModal(true)}
+                    className="px-4 py-2 text-sm text-primary hover:text-primaryHover"
+                  >
+                    View Full Guide
+                  </button>
+                  <button
+                    onClick={() => setShowSetupInstructions(false)}
+                    className="px-4 py-2 text-sm bg-primary text-white rounded hover:bg-primaryHover"
+                  >
+                    Got it!
+                  </button>
+                </div>
               </div>
             </div>
           </div>
