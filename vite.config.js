@@ -26,7 +26,7 @@ export default defineConfig(({ mode }) => ({
       registerType: 'prompt',
       strategies: 'injectManifest',
       srcDir: 'public',
-      filename: 'sw.js',
+      filename: 'service-worker.js',
       manifestFilename: 'manifest.json',
       injectRegister: 'inline',
       includeAssets: ['icons/icon.svg', 'robots.txt'],
