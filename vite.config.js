@@ -23,7 +23,12 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     VitePWA({ 
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
+      strategies: 'injectManifest',
+      srcDir: 'public',
+      filename: 'sw.js',
+      manifestFilename: 'manifest.json',
+      injectRegister: 'inline',
       includeAssets: ['icons/icon.svg', 'robots.txt'],
       manifest: {
         name: 'Thought Base',
@@ -49,17 +54,63 @@ export default defineConfig(({ mode }) => ({
             type: 'image/png',
             purpose: 'any maskable'
           }
-        ],
-        shortcuts: [
-          {
-            name: 'New Note',
-            short_name: 'New',
-            description: 'Create a new note',
-            url: '/new',
-            icons: [{ src: '/icons/icon.svg', sizes: 'any' }]
-          }
         ]
-      }
+      },
+      workbox: {
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
+        sourcemap: true,
+        runtimeCaching: [
+          {
+            // Cache page navigations
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'pages-cache',
+              expiration: {
+                maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+              },
+            },
+          },
+          {
+            // Cache API responses
+            urlPattern: /^https?:\/\/api\./i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-cache',
+              expiration: {
+                maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
+              },
+              networkTimeoutSeconds: 10,
+            },
+          },
+          {
+            // Cache static assets
+            urlPattern: /\.(?:png|jpg|jpeg|svg|gif|woff|woff2|ttf|eot|ico)$/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'assets-cache',
+              expiration: {
+                maxEntries: 100,
+                maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+              },
+            },
+          },
+          {
+            // Cache other resources
+            urlPattern: /.*$/,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'fallback-cache',
+              expiration: {
+                maxEntries: 200,
+                maxAgeSeconds: 60 * 60 * 24, // 24 hours
+              },
+            },
+          },
+        ],
+      },
     })
   ],
   server: {

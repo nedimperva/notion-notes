@@ -5,6 +5,49 @@ import remarkGfm from 'remark-gfm'
 import { notionOAuth } from './services/notion-oauth'
 import { register, checkForUpdates } from './registerServiceWorker'
 
+// Cache versioning
+const STORAGE_VERSION = '1.0.0';
+const STORAGE_KEYS = {
+  NOTES: 'thoughtbase_notes',
+  TEMPLATES: 'thoughtbase_templates',
+  PREFERENCES: 'thoughtbase_preferences'
+};
+
+// Enhanced localStorage wrapper with versioning
+const storage = {
+  get: (key) => {
+    try {
+      const data = localStorage.getItem(`${key}_v${STORAGE_VERSION}`);
+      return data ? JSON.parse(data) : null;
+    } catch (e) {
+      console.error(`Error reading ${key} from storage:`, e);
+      return null;
+    }
+  },
+  set: (key, value) => {
+    try {
+      localStorage.setItem(`${key}_v${STORAGE_VERSION}`, JSON.stringify(value));
+      return true;
+    } catch (e) {
+      console.error(`Error writing ${key} to storage:`, e);
+      // Try to recover space by clearing old versions
+      Object.keys(localStorage).forEach(k => {
+        if (k.startsWith(key) && !k.endsWith(STORAGE_VERSION)) {
+          localStorage.removeItem(k);
+        }
+      });
+      // Retry the save
+      try {
+        localStorage.setItem(`${key}_v${STORAGE_VERSION}`, JSON.stringify(value));
+        return true;
+      } catch (e) {
+        console.error('Failed to save even after cleanup:', e);
+        return false;
+      }
+    }
+  }
+};
+
 // Tags with Notion-like Tailwind background/text colors
 const TAGS = [
   { name: 'Work', color: 'bg-blue-100 text-blue-800' },
