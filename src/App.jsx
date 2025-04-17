@@ -1010,12 +1010,21 @@ export default function App() {
               >
                 <FileText size={20} />
               </button>
+              
               <button
                 onClick={() => setEditorViewMode(editorViewMode === 'editor' ? 'preview' : 'editor')}
                 className={`p-2 rounded ${editorViewMode === 'editor' ? 'bg-primaryLight' : 'hover:bg-accent1'}`}
                 title={editorViewMode === 'editor' ? 'Switch to Preview' : 'Switch to Edit'}
               >
                 {editorViewMode === 'editor' ? <Code size={20} /> : <Eye size={20} />}
+              </button>
+              <button
+                onClick={handleSyncCurrentNote}
+                disabled={!isOnline || !isAuthenticated || !currentNoteId || isSyncing || notes.find(n => n.id === currentNoteId)?.synced}
+                className="p-2 rounded text-gray-600 dark:text-gray-400 hover:bg-accent1 disabled:opacity-50 disabled:cursor-not-allowed"
+                title={!isAuthenticated ? "Connect to Notion first" : !isOnline ? "Cannot sync while offline" : !currentNoteId ? "Select a note to sync" : notes.find(n => n.id === currentNoteId)?.synced ? "Note is synced" : "Sync note to Notion"}
+              >
+                {isSyncing ? <Loader2 size={20} className="animate-spin" /> : <Upload size={20} />}
               </button>
               <button 
                 onClick={() => {
@@ -1027,6 +1036,7 @@ export default function App() {
               >
                 <Settings size={22} />
               </button>
+              
             </nav>
           )}
 
