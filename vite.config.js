@@ -19,7 +19,7 @@ const getLocalIP = () => {
 const localIP = getLocalIP();
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     VitePWA({ 
@@ -59,27 +59,11 @@ export default defineConfig({
             icons: [{ src: '/icons/icon.svg', sizes: 'any' }]
           }
         ]
-      },
-      workbox: {
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/api\.notion\.com\/.*/i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'notion-api-cache',
-              networkTimeoutSeconds: 10,
-              expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 24 * 60 * 60 // 24 hours
-              }
-            }
-          }
-        ]
       }
     })
   ],
   server: {
-    host: '0.0.0.0',
+    host: true, // Listen on all addresses
     port: 5173,
     proxy: {
       '/api': {
@@ -87,25 +71,17 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       }
+    },
+    watch: {
+      usePolling: true, // Enable polling for network drives and WSL
+    },
+    hmr: {
+      host: localIP,
+      protocol: 'ws',
     }
   },
   preview: {
-    host: '0.0.0.0',
+    host: true,
     port: 5173
-  },
-  build: {
-    cssCodeSplit: true,
-    sourcemap: true,
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          'react-vendor': ['react', 'react-dom'],
-          'ui-vendor': ['lucide-react'],
-        },
-      },
-    },
-  },
-  css: {
-    postcss: './postcss.config.cjs',
   }
-})
+}))

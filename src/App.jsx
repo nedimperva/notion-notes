@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Menu, PenLine, Tag, Image, Mic, Upload, MoreVertical, Wifi, WifiOff, ChevronDown, X, Loader2, LogOut, RefreshCw, FileText, BookOpen, PlusCircle, Edit, Settings, Eye, Code } from 'lucide-react'
+import { Menu, PenLine, Tag, Image, Mic, Upload, MoreVertical, Wifi, WifiOff, ChevronDown, X, Loader2, LogOut, RefreshCw, FileText, BookOpen, PlusCircle, Edit, Settings, Eye, Code, MoreHorizontal } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { notionOAuth } from './services/notion-oauth'
@@ -103,8 +103,11 @@ export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem('appTheme') || 'light'); // 'light', 'dark', 'sepia'
   const [fontFamily, setFontFamily] = useState(() => localStorage.getItem('appFontFamily') || 'sans'); // 'sans', 'mono'
   const [fontSize, setFontSize] = useState(() => localStorage.getItem('appFontSize') || 'base'); // 'sm', 'base', 'lg'
+  const [isFullWidth, setIsFullWidth] = useState(() => localStorage.getItem('isFullWidth') === 'true'); // Add this line
   // Debounce timer ref for autosave
   const autosaveTimerRef = useRef(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 640);
+  const [centeredEditor, setCenteredEditor] = useState(false);
   
   // Check authentication status on mount
   useEffect(() => {
@@ -324,6 +327,11 @@ export default function App() {
     localStorage.setItem('appFontSize', fontSize);
   }, [fontSize]);
 
+  // Save full width preference to localStorage
+  useEffect(() => {
+    localStorage.setItem('isFullWidth', isFullWidth);
+  }, [isFullWidth]);
+
   // --- Autosave Logic ---
   const autosaveNote = (noteId, title, content, tags) => {
     console.log('[Autosave] Triggered for noteId:', noteId);
@@ -399,16 +407,18 @@ export default function App() {
   // Depend on the fields that trigger the save
   }, [noteTitle, noteContent, currentNoteId, selectedTags]); 
 
-  const handleAddTag = (tag) => {
+  const handleAddTag = (tag, e) => {
+    if (e) e.stopPropagation();
     if (!selectedTags.some(t => t.name === tag.name)) {
-      setSelectedTags([...selectedTags, tag])
+      setSelectedTags([...selectedTags, tag]);
     }
-    // Do not close the dropdown here for multi-select
-  }
+    // Menu will close only when clicked outside due to the click outside handler
+  };
 
-  const handleRemoveTag = (tagToRemove) => {
-    setSelectedTags(selectedTags.filter(tag => tag.name !== tagToRemove.name))
-  }
+  const handleRemoveTag = (tag, e) => {
+    if (e) e.stopPropagation();
+    setSelectedTags(selectedTags.filter(t => t.name !== tag.name));
+  };
 
   const handleConnect = async () => {
     try {
@@ -634,8 +644,8 @@ export default function App() {
   };
 
   // New handler to apply template
-  const handleApplyTemplate = (template) => {
-    // Dynamically replace date placeholder if present
+  const handleApplyTemplate = (template, e) => {
+    if (e) e.stopPropagation();
     let finalTitle = template.title;
     if (template.title.includes('{new Date().toLocaleDateString()}')) {
         finalTitle = template.title.replace('{new Date().toLocaleDateString()}', new Date().toLocaleDateString());
@@ -657,7 +667,8 @@ export default function App() {
     setShowTemplateDropdown(false); // Close template sub-dropdown
   };
 
-  const handleOpenEditTemplateModal = (index) => {
+  const handleOpenEditTemplateModal = (index, e) => {
+    if (e) e.stopPropagation();
     const templateToEdit = customTemplates[index];
     if (!templateToEdit) return; 
 
@@ -721,9 +732,11 @@ export default function App() {
   };
 
   // Template delete handler
-  const handleDeleteTemplate = (index) => {
+  const handleDeleteTemplate = (index, e) => {
+    if (e) e.stopPropagation();
     if (window.confirm('Are you sure you want to delete this template?')) {
       setCustomTemplates(prev => prev.filter((_, i) => i !== index));
+      setShowTemplateDropdown(false);
     }
   };
 
@@ -746,13 +759,17 @@ export default function App() {
     setShowMoreOptionsDropdown(false); // Close dropdown after selection
   }
 
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 640);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   return (
     <ErrorBoundary>
-      {/* Main container with flex layout - Updated classes */}
-      <div className={`flex h-screen bg-background text-main ${fontFamily === 'mono' ? 'font-mono' : 'font-sans'}`}>
-
+      <div className={`flex h-screen bg-background text-main ${fontFamily === 'mono' ? 'font-mono' : 'font-sans'}`}> 
         {/* Sidebar */}
-        <div className={`fixed inset-y-0 left-0 transform ${showSidebar ? 'translate-x-0' : '-translate-x-full'} w-64 bg-surface border-r border-main transition-transform duration-300 ease-in-out z-30 flex flex-col`}>
+        <div className={`fixed inset-y-0 left-0 transform ${showSidebar ? 'translate-x-0' : '-translate-x-full'} w-64 bg-surface border-r border-main transition-transform duration-300 ease-in-out z-30 flex flex-col ${isMobile ? 'top-0 bottom-0' : ''}`}> 
           <div className="p-4 flex justify-between items-center border-b border-main">
             <h2 className="text-lg font-semibold">Notes</h2>
             <button onClick={closeSidebar} className="p-1 rounded hover:bg-accent1">
@@ -779,35 +796,12 @@ export default function App() {
             ))}
           </div>
           {/* Sidebar Footer - Notion Connection */}
-          <div className="p-4 border-t border-main">
-            {isAuthenticated && userInfo ? (
-              <div className="w-full flex flex-col items-center justify-center px-3 py-2 text-sm font-medium text-white bg-gray-700 rounded-md hover:bg-gray-800 disabled:opacity-50">
-                <span className="text-sm truncate">
-                  {userInfo.bot?.workspace_name}
-                </span>
-                {/* Display first database name if available */}
-                {databases.length > 0 && (
-                  <span className="mt-1 text-xs text-gray-300 truncate">
-                    {Array.isArray(databases[0].title)
-                      ? (databases[0].title[0]?.plain_text || 'Untitled DB')
-                      : (databases[0].title || 'Untitled DB')}
-                  </span>
-                )}
-              </div>
-            ) : (
-              <button onClick={handleConnect} disabled={isConnecting} className="w-full flex items-center justify-center px-3 py-2 text-sm font-medium text-white bg-accent2 rounded-md hover:bg-accent3 disabled:opacity-50">
-                {isConnecting ? <Loader2 className="animate-spin mr-2" size={16} /> : null}
-                Connect to Notion
-              </button>
-            )}
-            {connectionError && <p className="text-xs text-danger mt-1">{connectionError}</p>}
-          </div>
         </div>
-
-         {/* Main content area */}
+        {/* Main content area */}
         <div className="flex-1 flex flex-col transition-all duration-300 ease-in-out overflow-hidden">
-           {/* Header */}
-           <header className="flex items-center justify-between p-2 border-b border-main h-12 flex-shrink-0 bg-surface">
+          {/* Header (moved to bottom on mobile) */}
+          {!isMobile && (
+            <header className="flex items-center justify-between p-2 border-b border-main h-12 flex-shrink-0 bg-surface w-full">
               {/* Left side: Menu toggle and Title */}
               <div className="flex items-center flex-grow min-w-0">
                 <button onClick={toggleSidebar} className="p-2 rounded hover:bg-accent1 mr-2 flex-shrink-0">
@@ -934,237 +928,360 @@ export default function App() {
                  <div className="relative more-options-dropdown-container">
                     <button onClick={() => setShowMoreOptionsDropdown(!showMoreOptionsDropdown)} className="p-2 rounded hover:bg-accent1">
                          <MoreVertical size={20} />
-                     </button>
-                     {showMoreOptionsDropdown && (
-                          <div className="absolute right-0 mt-2 w-64 bg-surface rounded-md shadow-lg py-1 z-20 border border-main max-h-[80vh] overflow-y-auto">
-                               {/* Theme, Font, Font Size, Notion, etc. (remove Tag/Template sections from here) */}
-                               <div className="px-4 py-2 border-b border-main">
-                                   <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">Theme</h4>
-                                   <div className="flex items-center justify-between space-x-1">
-                                       <button onClick={() => handleThemeChange('light')} className={`flex-1 text-xs py-1 px-2 rounded ${theme === 'light' ? 'bg-primaryLight' : 'hover:bg-accent1'}`}>Light</button>
-                                       <button onClick={() => handleThemeChange('dark')} className={`flex-1 text-xs py-1 px-2 rounded ${theme === 'dark' ? 'bg-primaryLight' : 'hover:bg-accent1'}`}>Night</button>
-                                       <button onClick={() => handleThemeChange('sepia')} className={`flex-1 text-xs py-1 px-2 rounded ${theme === 'sepia' ? 'bg-primaryLight' : 'hover:bg-accent1'}`}>Sepia</button>
-                                   </div>
-                               </div>
-
-                               <div className="px-4 py-2 border-b border-main">
-                                   <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">Font Family</h4>
-                                   <div className="flex items-center border border-gray-300 dark:border-gray-600 rounded-md w-full">
-                                       <button
-                                           onClick={() => handleFontChange('sans')}
-                                           className={`flex-1 px-2 py-1 text-xs rounded-l-md ${fontFamily === 'sans' ? 'bg-primaryLight' : 'hover:bg-accent1'} flex items-center justify-center space-x-1`}
-                                           title="Sans Serif Font"
-                                       >
-                                          <span>Sans</span>
-                                       </button>
-                                       <button
-                                           onClick={() => handleFontChange('mono')}
-                                           className={`flex-1 px-2 py-1 text-xs rounded-r-md ${fontFamily === 'mono' ? 'bg-primaryLight' : 'hover:bg-accent1'} flex items-center justify-center space-x-1`}
-                                           title="Monospace Font"
-                                       >
-                                           <span>Mono</span>
-                                       </button>
-                                   </div>
-                               </div>
-
-                               <div className="px-4 py-2 border-b border-main">
-                                   <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">Font Size</h4>
-                                   <div className="flex items-center border border-gray-300 dark:border-gray-600 rounded-md w-full">
-                                       <button
-                                           onClick={() => handleFontSizeChange('sm')}
-                                           className={`flex-1 px-2 py-1 text-xs rounded-l-md ${fontSize === 'sm' ? 'bg-primaryLight' : 'hover:bg-accent1'} flex items-center justify-center`}
-                                           title="Small Font Size"
-                                       >
-                                          Small
-                                       </button>
-                                       <button
-                                           onClick={() => handleFontSizeChange('base')}
-                                           className={`flex-1 px-2 py-1 text-xs border-l border-r border-gray-300 dark:border-gray-600 ${fontSize === 'base' ? 'bg-primaryLight' : 'hover:bg-accent1'} flex items-center justify-center`}
-                                           title="Medium Font Size"
-                                       >
-                                          Medium
-                                       </button>
-                                       <button
-                                           onClick={() => handleFontSizeChange('lg')}
-                                           className={`flex-1 px-2 py-1 text-xs rounded-r-md ${fontSize === 'lg' ? 'bg-primaryLight' : 'hover:bg-accent1'} flex items-center justify-center`}
-                                           title="Large Font Size"
-                                       >
-                                          Large
-                                       </button>
-                                   </div>
-                               </div>
-
-                               <div className="px-4 py-2 border-b border-main">
-                                  <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">View Mode</h4>
-                                  <div className="flex items-center border border-gray-300 dark:border-gray-600 rounded-md w-full">
-                                      <button
-                                          onClick={() => { setEditorViewMode('editor'); setShowMoreOptionsDropdown(false); }}
-                                          className={`flex-1 px-2 py-1 text-xs rounded-l-md ${editorViewMode === 'editor' ? 'bg-primaryLight' : 'hover:bg-accent1'} flex items-center justify-center space-x-1`}
-                                          title="Edit Mode"
-                                      >
-                                          <Code size={14} /> <span>Editor</span>
-                                      </button>
-                                      <button
-                                          onClick={() => { setEditorViewMode('preview'); setShowMoreOptionsDropdown(false); }}
-                                          className={`flex-1 px-2 py-1 text-xs rounded-r-md ${editorViewMode === 'preview' ? 'bg-primaryLight' : 'hover:bg-accent1'} flex items-center justify-center space-x-1`}
-                                          title="Preview Mode"
-                                      >
-                                          <Eye size={14} /> <span>Preview</span>
-                                      </button>
-                                  </div>
-                              </div>
-
-                               <div className="px-4 py-2 border-b border-main">
-                                   <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">Notion</h4>
-                                   {isAuthenticated && userInfo ? (
-                                       <div className="flex items-center justify-between mb-1">
-                                           <span className="text-sm truncate flex items-center">
-                                               <img src="/icons/icon.svg" alt="Notion Icon" className="w-5 h-5 rounded-full mr-2" />
-                                               {userInfo.bot?.workspace_name || userInfo.person?.name || userInfo.name || 'Notion'}
-                                           </span>
-                                           <button onClick={() => { handleDisconnect(); setShowMoreOptionsDropdown(false); }} className="text-xs text-danger hover:text-dangerHover" title="Disconnect Notion">
-                                               Disconnect
-                                           </button>
-                                       </div>
-                                   ) : (
-                                       <button onClick={() => { handleConnect(); setShowMoreOptionsDropdown(false); }} disabled={isConnecting} className="w-full flex items-center justify-center px-2 py-1 text-sm font-medium text-white bg-accent2 rounded hover:bg-accent3 disabled:opacity-50">
-                                           {isConnecting ? <Loader2 className="animate-spin mr-1" size={14} /> : null}
-                                           Connect to Notion
-                                       </button>
-                                   )}
-                                   {connectionError && <p className="text-xs text-danger mt-1">{connectionError}</p>}
-                                   {isAuthenticated && databases.length > 0 && (
-                                       <select
-                                           value={selectedDatabase || ''}
-                                           onChange={(e) => setSelectedDatabase(e.target.value)}
-                                           className="w-full text-xs p-1 mt-2 border border-gray-300 rounded bg-white dark:bg-gray-700 dark:border-gray-600 focus:ring-primary focus:border-primary"
-                                       >
-                                           <option value="" disabled>Select Notion DB</option>
-                                           {databases.map(db => (
-                                               <option key={db.id} value={db.id}>{Array.isArray(db.title) ? (db.title[0]?.plain_text || 'Untitled') : (db.title || 'Untitled')}</option>
-                                           ))}
-                                       </select>
-                                   )}
-                               </div>
-
-                               <div className="px-4 py-2">
-                                   <button onClick={() => { setShowFormattingHelpModal(true); setShowMoreOptionsDropdown(false); }} className="w-full text-left px-2 py-1 text-sm text-gray-700 dark:text-gray-300 hover:bg-accent1 rounded flex items-center">
-                                       <BookOpen size={14} className="mr-2" /> Formatting Help
-                                   </button>
-                                    <button className="w-full text-left px-2 py-1 text-sm text-gray-400 dark:text-gray-500 hover:bg-accent1 rounded flex items-center cursor-not-allowed" title="Settings (coming soon)">
-                                       <Settings size={14} className="mr-2" /> Settings
-                                   </button>
-                               </div>
-                           </div>
-                       )}
-                    </div>
-                  </div>
-              </header>
-
-             <main className={`flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-background 
-                             ${fontSize === 'sm' ? 'text-sm' : fontSize === 'lg' ? 'text-lg' : 'text-base'}`}>
-                  {editorViewMode === 'editor' ? (
-                      <textarea
-                          value={noteContent}
-                          onChange={(e) => setNoteContent(e.target.value)}
-                          placeholder="Start writing..."
-                          className={`w-full h-full resize-none focus:outline-none bg-transparent dark:placeholder-gray-600 placeholder-gray-500 p-1 ${fontFamily === 'mono' ? 'font-mono' : 'font-sans'} 
-                                     ${fontSize === 'sm' ? 'leading-relaxed' : fontSize === 'lg' ? 'leading-loose' : 'leading-relaxed'}`} 
-                      />
-                  ) : (
-                      <div className={`prose dark:prose-invert max-w-none h-full overflow-y-auto p-1 ${fontFamily === 'mono' ? 'prose-mono' : ''} 
-                                      ${fontSize === 'sm' ? 'prose-sm leading-relaxed' : fontSize === 'lg' ? 'prose-lg leading-loose' : 'prose-base leading-relaxed'}`}> 
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{noteContent}</ReactMarkdown>
-                      </div>
-                  )}
-             </main>
-
-              <footer className="p-2 text-xs text-gray-400 dark:text-gray-500 h-8 flex items-center justify-end flex-shrink-0 bg-surface border-t border-main">
-                   <span>{noteContent.split(/\s+/).filter(Boolean).length} words, {noteContent.length} characters</span>
-              </footer>
-
-         </div>
-
-         {showTemplateModal && (
-             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40">
-                 <div className="bg-surface rounded-lg shadow-xl p-6 w-full max-w-md template-modal-content">
-                     <h3 className="text-lg font-medium mb-4">{isEditingTemplate ? 'Edit Template' : 'Add New Template'}</h3>
-                     <form onSubmit={handleSaveOrUpdateTemplate}>
-                         <div className="mb-4">
-                             <label htmlFor="templateName" className="block text-sm font-medium mb-1">Template Name</label>
-                             <input
-                                 type="text"
-                                 id="templateName"
-                                 value={templateFormName}
-                                 onChange={(e) => setTemplateFormName(e.target.value)}
-                                 required
-                                 className="w-full px-3 py-2 border border-main rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
-                             />
-                         </div>
-                          <div className="mb-4">
-                             <label htmlFor="templateTitle" className="block text-sm font-medium mb-1">Default Title</label>
-                              <input
-                                 type="text"
-                                 id="templateTitle"
-                                 value={templateFormTitle}
-                                 onChange={(e) => setTemplateFormTitle(e.target.value)}
-                                 placeholder="e.g., Meeting Notes: [Topic]"
-                                 className="w-full px-3 py-2 border border-main rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
-                             />
-                         </div>
-                         <div className="mb-4">
-                             <label htmlFor="templateContent" className="block text-sm font-medium mb-1">Content</label>
-                              <textarea
-                                 id="templateContent"
-                                 value={templateFormContent}
-                                 onChange={(e) => setTemplateFormContent(e.target.value)}
-                                 rows="6"
-                                 required
-                                 className="w-full px-3 py-2 border border-main rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
-                                 placeholder="Enter Markdown template content..."
-                             />
-                         </div>
-                         <div className="flex justify-end space-x-2">
-                             <button type="button" onClick={handleCancelTemplateModal} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-main rounded-md hover:bg-gray-50">
-                                 Cancel
-                             </button>
-                             <button type="submit" className="px-4 py-2 text-sm font-medium text-white bg-primary border border-transparent rounded-md shadow-sm hover:bg-primaryHover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primaryHover">
-                                 {isEditingTemplate ? 'Update Template' : 'Save Template'}
-                             </button>
-                         </div>
-                     </form>
+                    </button>
                  </div>
-             </div>
-         )}
+              </div>
+          </header>
+          )}
+          <main className={`flex-1 overflow-y-auto p-0 bg-background ${fontSize === 'sm' ? 'text-sm' : fontSize === 'lg' ? 'text-lg' : 'text-base'}`}>
+            <div className={`h-full mx-auto transition-all duration-300 ease-in-out ${isFullWidth ? 'max-w-full' : 'max-w-4xl'}`}>
+              {editorViewMode === 'editor' ? (
+                <div className="h-full bg-surface/80 dark:bg-surface/40 shadow-inner shadow-gray-300 dark:shadow-gray-900">
+                  <textarea
+                    value={noteContent}
+                    onChange={(e) => setNoteContent(e.target.value)}
+                    placeholder="Start writing..."
+                    className={`w-full h-full resize-none focus:outline-none bg-transparent dark:placeholder-gray-600 placeholder-gray-500 p-4 ${fontFamily === 'mono' ? 'font-mono' : 'font-sans'} ${fontSize === 'sm' ? 'leading-relaxed' : fontSize === 'lg' ? 'leading-loose' : 'leading-relaxed'}`}
+                  />
+                </div>
+              ) : (
+                <div className={`prose dark:prose-invert max-w-none h-full overflow-y-auto p-4 bg-surface/80 dark:bg-surface/40 shadow-inner shadow-gray-300 dark:shadow-gray-900 ${fontFamily === 'mono' ? 'prose-mono' : ''} ${fontSize === 'sm' ? 'prose-sm leading-relaxed' : fontSize === 'lg' ? 'prose-lg leading-loose' : 'prose-base leading-relaxed'}`}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{noteContent}</ReactMarkdown>
+                </div>
+              )}
+            </div>
+          </main>
+          {/* Footer (word/char count) */}
+          <footer className="p-2 text-xs text-gray-400 dark:text-gray-500 h-8 flex items-center justify-end flex-shrink-0 bg-surface border-t border-main w-full">
+            <span>{noteContent.split(/\s+/).filter(Boolean).length} words, {noteContent.length} characters</span>
+          </footer>
+          {/* Mobile bottom navbar */}
+          {isMobile && (
+            <nav className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-between bg-surface border-t border-main h-14 px-2">
+              <button onClick={toggleSidebar} className="p-2 rounded hover:bg-accent1">
+                <Menu size={22} />
+              </button>
+              <button
+                onClick={() => {
+                  setShowTagDropdown((v) => !v);
+                  setShowTemplateDropdown(false);
+                  setShowMoreOptionsDropdown(false);
+                }}
+                className={`p-2 rounded ${showTagDropdown ? 'bg-primaryLight' : 'hover:bg-accent1'}`}
+                title="Tags"
+              >
+                <Tag size={20} />
+              </button>
+              <button
+                onClick={() => {
+                  setShowTemplateDropdown((v) => !v);
+                  setShowTagDropdown(false);
+                  setShowMoreOptionsDropdown(false);
+                }}
+                className={`p-2 rounded ${showTemplateDropdown ? 'bg-primaryLight' : 'hover:bg-accent1'}`}
+                title="Templates"
+              >
+                <FileText size={20} />
+              </button>
+              <button
+                onClick={() => setEditorViewMode(editorViewMode === 'editor' ? 'preview' : 'editor')}
+                className={`p-2 rounded ${editorViewMode === 'editor' ? 'bg-primaryLight' : 'hover:bg-accent1'}`}
+                title={editorViewMode === 'editor' ? 'Switch to Preview' : 'Switch to Edit'}
+              >
+                {editorViewMode === 'editor' ? <Code size={20} /> : <Eye size={20} />}
+              </button>
+              <button 
+                onClick={() => {
+                  setShowMoreOptionsDropdown((v) => !v);
+                  setShowTagDropdown(false);
+                  setShowTemplateDropdown(false);
+                }} 
+                className={`p-2 rounded ${showMoreOptionsDropdown ? 'bg-primaryLight' : 'hover:bg-accent1'}`}
+              >
+                <Settings size={22} />
+              </button>
+            </nav>
+          )}
 
-         {showFormattingHelpModal && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40">
-                 <div className="bg-surface rounded-lg shadow-xl p-6 w-full max-w-lg relative">
-                     <button onClick={() => setShowFormattingHelpModal(false)} className="absolute top-2 right-2 p-1 rounded hover:bg-accent1">
-                         <X size={20} />
-                     </button>
-                      <h3 className="text-lg font-medium mb-4">Markdown Formatting Help</h3>
-                      <div className="prose prose-sm dark:prose-invert max-w-none text-sm space-y-2">
-                         <p><code># Heading 1</code></p>
-                         <p><code>## Heading 2</code></p>
-                         <p><code>**Bold text**</code> or <code>__Bold text__</code></p>
-                         <p><code>*Italic text*</code> or <code>_Italic text_</code></p>
-                         <p><code>`Inline code`</code></p>
-                         <p><code>[Link text](https://example.com)</code></p>
-                         <p><code>![Alt text](image_url.jpg)</code></p>
-                         <p><code>- Unordered list item</code></p>
-                         <p><code>1. Ordered list item</code></p>
-                         <p><code>&gt; Blockquote</code></p>
-                         <p><code>---</code> or <code>***</code> for horizontal rule</p>
-                          <p><code>```python</code><br/><code># Code block</code><br/><code>print(\"Hello\")</code><br/><code>```</code></p>
-                          <p><code>- [ ] Task list item</code></p>
-                          <p><code>- [x] Completed task</code></p>
-                      </div>
+          {/* Single More Options Dropdown for both mobile and desktop */}
+          {showMoreOptionsDropdown && (
+            <div className={`fixed ${isMobile ? 'bottom-16 left-2 right-2' : 'top-14 right-2'} z-50 w-full max-w-xs mx-auto bg-surface rounded-md shadow-lg py-1 border border-main max-h-[80vh] overflow-y-auto more-options-dropdown-container`}>
+              <div className="px-4 py-2 border-b border-main">
+                <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">Theme</h4>
+                <div className="flex items-center justify-between space-x-1">
+                  <button onClick={() => handleThemeChange('light')} className={`flex-1 text-xs py-1 px-2 rounded ${theme === 'light' ? 'bg-primaryLight' : 'hover:bg-accent1'}`}>Light</button>
+                  <button onClick={() => handleThemeChange('dark')} className={`flex-1 text-xs py-1 px-2 rounded ${theme === 'dark' ? 'bg-primaryLight' : 'hover:bg-accent1'}`}>Night</button>
+                  <button onClick={() => handleThemeChange('sepia')} className={`flex-1 text-xs py-1 px-2 rounded ${theme === 'sepia' ? 'bg-primaryLight' : 'hover:bg-accent1'}`}>Sepia</button>
+                </div>
+              </div>
+
+              <div className="px-4 py-2 border-b border-main">
+                <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">Font Family</h4>
+                <div className="flex items-center border border-gray-300 dark:border-gray-600 rounded-md w-full">
+                  <button onClick={() => handleFontChange('sans')} className={`flex-1 px-2 py-1 text-xs rounded-l-md ${fontFamily === 'sans' ? 'bg-primaryLight' : 'hover:bg-accent1'}`}>Sans</button>
+                  <button onClick={() => handleFontChange('mono')} className={`flex-1 px-2 py-1 text-xs rounded-r-md ${fontFamily === 'mono' ? 'bg-primaryLight' : 'hover:bg-accent1'}`}>Mono</button>
+                </div>
+              </div>
+
+              <div className="px-4 py-2 border-b border-main">
+                <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">Font Size</h4>
+                <div className="flex items-center border border-gray-300 dark:border-gray-600 rounded-md w-full">
+                  <button onClick={() => handleFontSizeChange('sm')} className={`flex-1 px-2 py-1 text-xs rounded-l-md ${fontSize === 'sm' ? 'bg-primaryLight' : 'hover:bg-accent1'}`}>Small</button>
+                  <button onClick={() => handleFontSizeChange('base')} className={`flex-1 px-2 py-1 text-xs border-l border-r border-gray-300 dark:border-gray-600 ${fontSize === 'base' ? 'bg-primaryLight' : 'hover:bg-accent1'}`}>Medium</button>
+                  <button onClick={() => handleFontSizeChange('lg')} className={`flex-1 px-2 py-1 text-xs rounded-r-md ${fontSize === 'lg' ? 'bg-primaryLight' : 'hover:bg-accent1'}`}>Large</button>
+                </div>
+              </div>
+
+              <div className="px-4 py-2 border-b border-main">
+                <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">Layout</h4>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">Full Width</span>
+                  <button 
+                    onClick={() => {
+                      setIsFullWidth(!isFullWidth);
+                      setShowMoreOptionsDropdown(false);
+                    }}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 ${isFullWidth ? 'bg-primary' : 'bg-gray-200 dark:bg-gray-700'}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isFullWidth ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="px-4 py-2 border-b border-main">
+                <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">Notion</h4>
+                {isAuthenticated && userInfo ? (
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm truncate flex items-center">
+                      <img src="/icons/icon.svg" alt="Notion Icon" className="w-5 h-5 rounded-full mr-2" />
+                      {userInfo.bot?.workspace_name || userInfo.person?.name || userInfo.name || 'Notion'}
+                    </span>
+                    <button onClick={() => { handleDisconnect(); setShowMoreOptionsDropdown(false); }} className="text-xs text-danger hover:text-dangerHover">
+                      Disconnect
+                    </button>
                   </div>
+                ) : (
+                  <button onClick={() => { handleConnect(); setShowMoreOptionsDropdown(false); }} disabled={isConnecting} className="w-full flex items-center justify-center px-2 py-1 text-sm font-medium text-white bg-accent2 rounded hover:bg-accent3 disabled:opacity-50">
+                    {isConnecting ? <Loader2 className="animate-spin mr-1" size={14} /> : null}
+                    Connect to Notion
+                  </button>
+                )}
+                {connectionError && <p className="text-xs text-danger mt-1">{connectionError}</p>}
+                {isAuthenticated && databases.length > 0 && (
+                  <select
+                    value={selectedDatabase || ''}
+                    onChange={(e) => setSelectedDatabase(e.target.value)}
+                    className="w-full text-xs p-1 mt-2 border border-gray-300 rounded bg-white dark:bg-gray-700 dark:border-gray-600 focus:ring-primary focus:border-primary"
+                  >
+                    <option value="" disabled>Select Notion DB</option>
+                    {databases.map(db => (
+                      <option key={db.id} value={db.id}>{Array.isArray(db.title) ? (db.title[0]?.plain_text || 'Untitled') : (db.title || 'Untitled')}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <div className="px-4 py-2">
+                <button onClick={() => { setShowFormattingHelpModal(true); setShowMoreOptionsDropdown(false); }} className="w-full text-left px-2 py-1 text-sm text-gray-700 dark:text-gray-300 hover:bg-accent1 rounded flex items-center">
+                  <BookOpen size={14} className="mr-2" /> Formatting Help
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        {/* Template Modal */}
+        {showTemplateModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+            <div className="template-modal-content bg-surface rounded-lg shadow-lg w-full max-w-lg mx-4">
+              <div className="p-4 border-b border-main">
+                <h3 className="text-lg font-semibold">
+                  {isEditingTemplate ? 'Edit Template' : 'Add New Template'}
+                </h3>
+              </div>
+              <form onSubmit={handleSaveOrUpdateTemplate} className="p-4 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Template Name</label>
+                  <input
+                    type="text"
+                    value={templateFormName}
+                    onChange={(e) => setTemplateFormName(e.target.value)}
+                    className="w-full p-2 border border-main rounded bg-background"
+                    placeholder="e.g., Meeting Notes"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Title Format</label>
+                  <input
+                    type="text"
+                    value={templateFormTitle}
+                    onChange={(e) => setTemplateFormTitle(e.target.value)}
+                    className="w-full p-2 border border-main rounded bg-background"
+                    placeholder="e.g., Meeting Notes: [Topic]"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Template Content</label>
+                  <textarea
+                    value={templateFormContent}
+                    onChange={(e) => setTemplateFormContent(e.target.value)}
+                    className="w-full h-48 p-2 border border-main rounded bg-background font-mono text-sm resize-none"
+                    placeholder="Enter your template content using Markdown..."
+                    required
+                  />
+                </div>
+                <div className="flex justify-end space-x-2 pt-4">
+                  <button
+                    type="button"
+                    onClick={handleCancelTemplateModal}
+                    className="px-4 py-2 text-sm border border-main rounded hover:bg-accent1"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 text-sm bg-primary text-white rounded hover:bg-primaryHover"
+                  >
+                    {isEditingTemplate ? 'Update Template' : 'Save Template'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+        {/* Formatting Help Modal */}
+        {showFormattingHelpModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+            <div className="bg-surface rounded-lg shadow-lg w-full max-w-2xl mx-4 max-h-[80vh] overflow-y-auto">
+              <div className="p-4 border-b border-main flex justify-between items-center">
+                <h3 className="text-lg font-semibold">Markdown Formatting Guide</h3>
+                <button onClick={() => setShowFormattingHelpModal(false)} className="text-gray-500 hover:text-gray-700">
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="p-4 space-y-4">
+                {/* Add your markdown guide content here */}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+      {isMobile && (
+        <>
+          {/* Tag Dropdown - Mobile */}
+          {showTagDropdown && (
+            <div 
+              className="fixed left-2 right-2 bottom-20 z-50 w-full max-w-xs mx-auto bg-surface rounded-md shadow-lg py-2 border border-main"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-3 pb-2">
+                {selectedTags.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {selectedTags.map(tag => (
+                      <span key={tag.name} className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${tag.color}`}>
+                        {tag.name}
+                        <button 
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleRemoveTag(tag, e);
+                          }}
+                          className={`ml-1 flex-shrink-0 ${tag.color.split(' ')[1]} hover:text-${tag.color.split(' ')[1].replace('800', '700')} focus:outline-none`}
+                        >
+                          <X size={10} strokeWidth={3}/>
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-xs text-gray-400">No tags selected</span>
+                )}
+              </div>
+              <div className="border-t border-main pt-2 px-3">
+                <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Add Tag</div>
+                {TAGS.filter(at => !selectedTags.some(st => st.name === at.name)).map(tag => (
+                  <button
+                    key={tag.name}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleAddTag(tag, e);
+                    }}
+                    className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-accent1 flex items-center"
+                  >
+                    <span className={`w-2.5 h-2.5 rounded-full mr-2 ${tag.color.split(' ')[0]}`}></span>
+                    {tag.name}
+                  </button>
+                ))}
+                {TAGS.filter(at => !selectedTags.some(st => st.name === at.name)).length === 0 && (
+                  <p className="px-3 py-1.5 text-sm text-gray-500 dark:text-gray-400">No more tags</p>
+                )}
+              </div>
             </div>
           )}
 
-       </div>
-     </ErrorBoundary>
-   )
+          {/* Template Dropdown - Mobile */}
+          {showTemplateDropdown && (
+            <div 
+              className="fixed left-2 right-2 bottom-20 z-50 w-full max-w-xs mx-auto bg-surface rounded-md shadow-lg py-1 border border-main"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button 
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleOpenAddTemplateModal();
+                }}
+                className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-accent1 flex items-center"
+              >
+                <PlusCircle size={14} className="mr-2 flex-shrink-0" /> Add New Template
+              </button>
+              {(Array.isArray(customTemplates) ? customTemplates : []).map((template, index) => (
+                <div 
+                  key={index} 
+                  className="flex items-center justify-between px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-accent1 group"
+                >
+                  <span 
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleApplyTemplate(template, e);
+                    }}
+                    className="flex-grow cursor-pointer truncate"
+                  >
+                    {template.name}
+                  </span>
+                  <button 
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleOpenEditTemplateModal(index, e);
+                    }}
+                    className="ml-2 opacity-100 text-gray-500 hover:text-primary" 
+                    title="Edit Template"
+                  >
+                    <Edit size={12} className="flex-shrink-0" />
+                  </button>
+                  <button 
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleDeleteTemplate(index, e);
+                    }}
+                    className="ml-2 opacity-100 text-danger hover:text-dangerHover" 
+                    title="Delete Template"
+                  >
+                    <X size={12} className="flex-shrink-0" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </ErrorBoundary>
+  )
 }
