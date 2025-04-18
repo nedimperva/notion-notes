@@ -5,7 +5,7 @@
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#000000",
+  "theme_color": "#2DD4BF",
   "icons": [
     {
       "src": "/icons/icon-192x192.png",
@@ -18,40 +18,32 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
   ],
   "scope": "/",
   "orientation": "portrait",
-  "prefer_related_applications": false,
   "categories": ["productivity", "utilities"],
-  "shortcuts": [
-    {
-      "name": "New Note",
-      "short_name": "New",
-      "description": "Create a new note",
-      "url": "/new",
-      "icons": [{ "src": "/icons/icon.svg", "sizes": "any" }]
-    }
-  ],
   "screenshots": [],
-  "related_applications": [],
-  "protocol_handlers": [],
   "share_target": {
     "action": "/share-target",
-    "method": "GET",
+    "enctype": "multipart/form-data",
+    "method": "POST",
     "params": {
       "title": "title",
       "text": "text",
-      "url": "url"
+      "url": "url",
+      "files": [
+        {
+          "name": "media",
+          "accept": ["image/*"]
+        }
+      ]
     }
-  },
-  "display_override": ["standalone", "window-controls-overlay"],
-  "edge_side_panel": {
-    "preferred_width": 400
-  },
-  "custom_caching": {
-    "strategy": "data-first",
-    "version": "1.0.0",
-    "retention_policy": "keep-until-sync"
   }
 }

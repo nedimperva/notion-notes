@@ -3,7 +3,6 @@ import { Menu, PenLine, Tag, Image, Mic, Upload, MoreVertical, Wifi, WifiOff, Ch
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { notionOAuth } from './services/notion-oauth'
-import { register, checkForUpdates } from './registerServiceWorker'
 
 // Cache versioning
 const STORAGE_VERSION = '1.0.0';
@@ -153,6 +152,10 @@ export default function App() {
   const [centeredEditor, setCenteredEditor] = useState(false);
   // Add new state for setup instructions modal
   const [showSetupInstructions, setShowSetupInstructions] = useState(false);
+  // PWA installation states
+  const [pwaInstallPrompt, setPwaInstallPrompt] = useState(null);
+  const [canInstallPwa, setCanInstallPwa] = useState(false);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
   
   // Check authentication status on mount
   useEffect(() => {
@@ -235,18 +238,28 @@ export default function App() {
     }
   }, [])
 
-  // Load saved notes from localStorage
+  // Load saved notes from versioned localStorage
   useEffect(() => {
-    const savedNotes = localStorage.getItem('notes')
+    console.log('[Storage Load] Attempting to load notes...');
+    const savedNotesRaw = localStorage.getItem(`${STORAGE_KEYS.NOTES}_v${STORAGE_VERSION}`);
+    console.log('[Storage Load] Raw data from localStorage:', savedNotesRaw);
+    const savedNotes = storage.get(STORAGE_KEYS.NOTES);
+    console.log('[Storage Load] Parsed data via storage.get:', savedNotes);
     if (savedNotes) {
-      setNotes(JSON.parse(savedNotes))
+      setNotes(savedNotes);
+      console.log('[Storage Load] Notes state set from storage:', savedNotes);
+    } else {
+      console.log('[Storage Load] No saved notes found or data was invalid.');
     }
-  }, [])
+  }, []);
 
-  // Save notes to localStorage whenever they change
+  // Save notes to versioned localStorage whenever they change
   useEffect(() => {
-    localStorage.setItem('notes', JSON.stringify(notes))
-  }, [notes])
+    // Removed the condition: if (notes.length > 0 || storage.get(STORAGE_KEYS.NOTES) !== null)
+    // Now it saves whenever the 'notes' state changes after the initial load.
+    storage.set(STORAGE_KEYS.NOTES, notes);
+    console.log('[Storage] Saved notes to storage:', notes.length);
+  }, [notes]);
 
   // Online/offline detection
   useEffect(() => {
@@ -268,11 +281,6 @@ export default function App() {
       syncUnsyncedNotes()
     }
   }, [isOnline, notionAuth])
-
-  // Register service worker on mount
-  useEffect(() => {
-    register();
-  }, []);
 
   // Load custom templates from localStorage on mount OR initialize with defaults
   useEffect(() => {
@@ -422,8 +430,6 @@ export default function App() {
         console.log('[Autosave] Created new note:', newNote);
       }
 
-      // Save updated notes array to localStorage
-      localStorage.setItem('notes', JSON.stringify(updatedNotes));
       return updatedNotes;
     });
   };
@@ -595,7 +601,7 @@ export default function App() {
         const updatedNotes = prevNotes.map(note => 
           note.id === currentNoteId ? { ...note, synced: true } : note
         );
-        localStorage.setItem('notes', JSON.stringify(updatedNotes)); // Update localStorage as well
+        storage.set(STORAGE_KEYS.NOTES, updatedNotes); // Update localStorage as well
         console.log(`[Sync] Successfully synced note ID: ${currentNoteId}. Updated local state.`);
         return updatedNotes;
       });
@@ -822,6 +828,40 @@ export default function App() {
 
     handleFirstTimeSetup();
   }, [isAuthenticated]);
+
+  // PWA installation prompt handler
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      setPwaInstallPrompt(e);
+      setCanInstallPwa(true);
+      setShowInstallBanner(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallPwa = () => {
+    if (pwaInstallPrompt) {
+      pwaInstallPrompt.prompt();
+      pwaInstallPrompt.userChoice.then((choiceResult) => {
+        if (choiceResult.outcome === 'accepted') {
+          console.log('PWA installation accepted');
+        } else {
+          console.log('PWA installation dismissed');
+        }
+        setPwaInstallPrompt(null);
+        setCanInstallPwa(false);
+        setShowInstallBanner(false);
+      });
+    }
+  };
+
+  console.log('[App Render] Notes state:', notes); // Log notes state on every render
 
   return (
     <ErrorBoundary>
@@ -1161,6 +1201,22 @@ export default function App() {
                 )}
               </div>
 
+              {/* Install App Section */}
+              {canInstallPwa && (
+                <div className="px-4 py-2 border-b border-main">
+                  <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">App</h4>
+                  <button 
+                    onClick={() => { 
+                      handleInstallPwa(); 
+                      setShowMoreOptionsDropdown(false);
+                    }} 
+                    className="w-full flex items-center justify-center px-2 py-2 text-sm font-medium text-white bg-primary rounded hover:bg-primaryHover"
+                  >
+                    Install ThoughtBase App
+                  </button>
+                </div>
+              )}
+
               <div className="px-4 py-2">
                 <button onClick={() => { setShowFormattingHelpModal(true); setShowMoreOptionsDropdown(false); }} className="w-full text-left px-2 py-1 text-sm text-gray-700 dark:text-gray-300 hover:bg-accent1 rounded flex items-center">
                   <BookOpen size={14} className="mr-2" /> Formatting Help
@@ -1294,9 +1350,9 @@ export default function App() {
                 <div className="bg-background p-4 rounded-md">
                   <h4 className="font-semibold mb-2">Required Database Properties</h4>
                   <ul className="list-disc pl-5 space-y-2">
-                    <li><strong>Title</strong> (Title type) - Required: For note titles</li>
-                    <li><strong>Tags</strong> (Multi-select type) - Required: For note categorization</li>
-                    <li><strong>Category</strong> (Select type) - Required: For primary categorization</li>
+                    <li><strong>Title</strong> (Title type)</li>
+                    <li><strong>Tags</strong> (Multi-select type)</li>
+                    <li><strong>Category</strong> (Select type)</li>
                   </ul>
                 </div>
                 <div className="space-y-2">
@@ -1442,6 +1498,16 @@ export default function App() {
             </div>
           )}
         </>
+      )}
+      {/* PWA Install Banner */}
+      {showInstallBanner && canInstallPwa && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-surface border-t border-main p-4 flex items-center justify-between">
+          <div className="text-sm">Install this app for a better experience.</div>
+          <div className="flex items-center space-x-2">
+            <button onClick={() => setShowInstallBanner(false)} className="text-sm text-gray-500 hover:text-gray-700">Dismiss</button>
+            <button onClick={handleInstallPwa} className="px-4 py-2 text-sm bg-primary text-white rounded hover:bg-primaryHover">Install</button>
+          </div>
+        </div>
       )}
     </ErrorBoundary>
   )

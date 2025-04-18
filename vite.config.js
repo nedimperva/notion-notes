@@ -26,10 +26,8 @@ export default defineConfig(({ mode }) => ({
       registerType: 'prompt',
       strategies: 'injectManifest',
       srcDir: 'public',
-      filename: 'service-worker.js',
-      manifestFilename: 'manifest.json',
-      injectRegister: 'inline',
-      includeAssets: ['icons/icon.svg', 'robots.txt'],
+      filename: 'sw.js',
+      includeAssets: ['icons/icon.svg', 'robots.txt', 'index.html'],
       manifest: {
         name: 'Thought Base',
         short_name: 'ThoughtBase',
@@ -61,6 +59,7 @@ export default defineConfig(({ mode }) => ({
         clientsClaim: true,
         skipWaiting: true,
         sourcemap: true,
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         runtimeCaching: [
           {
             // Cache page navigations

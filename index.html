@@ -6,64 +6,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#2DD4BF" />
     <meta name="description" content="A note-taking app with Notion integration" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" /> <!-- Standard tag -->
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Thought Base" />
     <link rel="apple-touch-icon" href="/icons/icon.svg" />
-    <link rel="manifest" href="/manifest.json" />
+    <link rel="manifest" href="/manifest.json" type="application/manifest+json" />
     <title>Thought Base</title>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
-    <script>
-      // Register service worker
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then(registration => {
-              console.log('ServiceWorker registration successful');
-            })
-            .catch(err => {
-              console.log('ServiceWorker registration failed: ', err);
-            });
-        });
-      }
-
-      // Handle PWA installation prompt
-      let deferredPrompt;
-      const installButton = document.createElement('button');
-      installButton.style.display = 'none';
-      installButton.textContent = 'Install App';
-      installButton.className = 'fixed bottom-4 right-4 bg-teal-500 text-white px-4 py-2 rounded-lg shadow-lg hover:bg-teal-600 transition-colors';
-      document.body.appendChild(installButton);
-
-      window.addEventListener('beforeinstallprompt', (e) => {
-        e.preventDefault();
-        deferredPrompt = e;
-        installButton.style.display = 'block';
-      });
-
-      installButton.addEventListener('click', async () => {
-        if (!deferredPrompt) return;
-        
-        deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
-        
-        if (outcome === 'accepted') {
-          console.log('User accepted the install prompt');
-        } else {
-          console.log('User dismissed the install prompt');
-        }
-        
-        deferredPrompt = null;
-        installButton.style.display = 'none';
-      });
-
-      window.addEventListener('appinstalled', () => {
-        console.log('PWA was installed');
-        installButton.style.display = 'none';
-      });
-    </script>
   </body>
 </html>
