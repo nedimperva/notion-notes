@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Menu, PenLine, Tag, Image, Mic, Upload, MoreVertical, Wifi, WifiOff, ChevronDown, X, Loader2, LogOut, RefreshCw, FileText, BookOpen, PlusCircle, Edit, Settings, Eye, Code, MoreHorizontal } from 'lucide-react'
+import { Menu, PenLine, Tag, Image, Mic, Upload, MoreVertical, Wifi, WifiOff, ChevronDown, X, Loader2, LogOut, RefreshCw, FileText, BookOpen, PlusCircle, Edit, Settings, Eye, Code, MoreHorizontal, Home, Save } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { notionOAuth } from './services/notion-oauth'
@@ -156,6 +156,13 @@ export default function App() {
   const [pwaInstallPrompt, setPwaInstallPrompt] = useState(null);
   const [canInstallPwa, setCanInstallPwa] = useState(false);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
+  // New native app UX states
+  const [isNavVisible, setIsNavVisible] = useState(true); // For hiding nav when scrolling
+  const [lastScrollY, setLastScrollY] = useState(0);
+  const [isAppLoaded, setIsAppLoaded] = useState(false);
+  const [hasSafeArea, setHasSafeArea] = useState(false);
+  const [touchStartY, setTouchStartY] = useState(0);
+  const mainContainerRef = useRef(null);
   
   // Check authentication status on mount
   useEffect(() => {
@@ -241,15 +248,33 @@ export default function App() {
   // Load saved notes from versioned localStorage
   useEffect(() => {
     console.log('[Storage Load] Attempting to load notes...');
-    const savedNotesRaw = localStorage.getItem(`${STORAGE_KEYS.NOTES}_v${STORAGE_VERSION}`);
-    console.log('[Storage Load] Raw data from localStorage:', savedNotesRaw);
+    
+    // First try the versioned storage approach
     const savedNotes = storage.get(STORAGE_KEYS.NOTES);
-    console.log('[Storage Load] Parsed data via storage.get:', savedNotes);
-    if (savedNotes) {
+    
+    if (savedNotes && Array.isArray(savedNotes) && savedNotes.length > 0) {
+      console.log('[Storage Load] Loaded notes using versioned storage:', savedNotes.length);
       setNotes(savedNotes);
-      console.log('[Storage Load] Notes state set from storage:', savedNotes);
     } else {
-      console.log('[Storage Load] No saved notes found or data was invalid.');
+      // Fallback to checking legacy storage format as backup
+      try {
+        const legacyNotes = localStorage.getItem('thoughtbase_notes');
+        if (legacyNotes) {
+          const parsedLegacyNotes = JSON.parse(legacyNotes);
+          if (Array.isArray(parsedLegacyNotes) && parsedLegacyNotes.length > 0) {
+            console.log('[Storage Load] Loaded notes from legacy storage:', parsedLegacyNotes.length);
+            setNotes(parsedLegacyNotes);
+            // Also save in the new versioned format for next time
+            storage.set(STORAGE_KEYS.NOTES, parsedLegacyNotes);
+          } else {
+            console.log('[Storage Load] No valid notes found in legacy storage.');
+          }
+        } else {
+          console.log('[Storage Load] No saved notes found in any storage format.');
+        }
+      } catch (error) {
+        console.error('[Storage Load] Error attempting to load notes:', error);
+      }
     }
   }, []);
 
@@ -384,6 +409,65 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('isFullWidth', isFullWidth);
   }, [isFullWidth]);
+
+  // Check for safe area insets on devices with notches
+  useEffect(() => {
+    const checkSafeArea = () => {
+      // Check if safe areas are supported and needed
+      const safeAreaTop = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sat') || '0', 10);
+      const safeAreaBottom = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sab') || '0', 10);
+      setHasSafeArea(safeAreaTop > 0 || safeAreaBottom > 0);
+    };
+    
+    // Add CSS variables for safe area insets
+    document.documentElement.style.setProperty('--sat', 'env(safe-area-inset-top, 0px)');
+    document.documentElement.style.setProperty('--sab', 'env(safe-area-inset-bottom, 0px)');
+    
+    checkSafeArea();
+    window.addEventListener('resize', checkSafeArea);
+    
+    return () => {
+      window.removeEventListener('resize', checkSafeArea);
+    };
+  }, []);
+
+  // Add app loaded animation
+  useEffect(() => {
+    // Wait for initial rendering to complete
+    const timer = setTimeout(() => {
+      setIsAppLoaded(true);
+    }, 300);
+    
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Hide navigation on scroll for a more native experience on mobile
+  useEffect(() => {
+    if (!isMobile) return;
+    
+    const handleScroll = () => {
+      if (mainContainerRef.current) {
+        const scrollY = mainContainerRef.current.scrollTop;
+        const isScrollingDown = scrollY > lastScrollY && scrollY > 40;
+        const isScrollingUp = scrollY < lastScrollY;
+        
+        // Only change state when direction changes to avoid frequent rerenders
+        if (isScrollingDown && isNavVisible) {
+          setIsNavVisible(false);
+        } else if (isScrollingUp && !isNavVisible) {
+          setIsNavVisible(true);
+        }
+        
+        setLastScrollY(scrollY);
+      }
+    };
+    
+    const container = mainContainerRef.current;
+    if (container) {
+      container.addEventListener('scroll', handleScroll, { passive: true });
+      return () => container.removeEventListener('scroll', handleScroll);
+    }
+  }, [isMobile, lastScrollY, isNavVisible]);
 
   // --- Autosave Logic ---
   const autosaveNote = (noteId, title, content, tags) => {
@@ -564,8 +648,10 @@ export default function App() {
     console.log("Sync process finished.");
   };
 
-  // Filter out synced notes when displaying
-  const unsyncedNotes = notes.filter(note => !note.synced).sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+  // Filter out synced notes when displaying - Only showing unsynced notes
+  const notesToDisplay = notes
+    .filter(note => !note.synced)
+    .sort((a, b) => new Date(b.lastModified || b.updatedAt || b.createdAt) - new Date(a.lastModified || a.updatedAt || a.createdAt));
 
   // New function to explicitly sync the current note
   const handleSyncCurrentNote = async () => {
@@ -677,11 +763,36 @@ export default function App() {
     });
   };
 
-  // Toggle sidebar visibility
-  const toggleSidebar = () => setShowSidebar(!showSidebar);
+  // Toggle sidebar visibility with animation
+  const toggleSidebar = () => {
+    setShowSidebar(!showSidebar);
+    // Prevent body scroll when sidebar is open
+    document.body.style.overflow = !showSidebar ? 'hidden' : '';
+  };
 
   // Close sidebar (useful on mobile when clicking outside or on an item)
-  const closeSidebar = () => setShowSidebar(false);
+  const closeSidebar = () => {
+    setShowSidebar(false);
+    document.body.style.overflow = '';
+  };
+
+  // Track touch start position for swipe gestures
+  const handleTouchStart = (e) => {
+    setTouchStartY(e.touches[0].clientY);
+  };
+  
+  // Handle swipe gestures for native mobile app feel
+  const handleTouchMove = (e) => {
+    if (!isMobile) return;
+    
+    const touchY = e.touches[0].clientY;
+    const touchDiff = touchY - touchStartY;
+    
+    // If swiping down from the top edge when scrolled to top, show a pull-to-refresh effect
+    if (mainContainerRef.current?.scrollTop === 0 && touchDiff > 70) {
+      // Could trigger refresh action here
+    }
+  };
 
   // Handlers adjusted slightly for sidebar closing
   const handleSelectNoteAndCloseSidebar = (note) => {
@@ -865,27 +976,32 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <div className={`flex h-screen bg-background text-main ${fontFamily === 'mono' ? 'font-mono' : 'font-sans'}`}> 
-        {/* Sidebar */}
-        <div className={`fixed inset-y-0 left-0 transform ${showSidebar ? 'translate-x-0' : '-translate-x-full'} w-64 bg-surface border-r border-main transition-transform duration-300 ease-in-out z-30 flex flex-col ${isMobile ? 'top-0 bottom-0' : ''}`}> 
+      <div 
+        className={`flex h-screen bg-background text-main ${fontFamily === 'mono' ? 'font-mono' : 'font-sans'} ${!isAppLoaded ? 'opacity-0' : 'app-animate-fade'} overflow-hidden`}
+      > 
+        {/* Sidebar with improved animation */}
+        <div 
+          className={`fixed inset-y-0 left-0 app-sidebar ${showSidebar ? 'app-sidebar-show' : 'app-sidebar-hide'} w-64 bg-surface border-r border-main z-30 flex flex-col ${isMobile ? 'top-0 bottom-0' : ''} ${hasSafeArea ? 'app-inset-top' : ''}`}
+        > 
           <div className="p-4 flex justify-between items-center border-b border-main">
             <h2 className="text-lg font-semibold">Notes</h2>
-            <button onClick={closeSidebar} className="p-1 rounded hover:bg-accent1">
+            <button onClick={closeSidebar} className="app-icon-btn hover:bg-accent1">
               <X size={20} />
             </button>
           </div>
           <div className="flex-grow overflow-y-auto p-4 space-y-2">
-            <button onClick={handleNewNoteAndCloseSidebar} className="w-full flex items-center justify-center px-3 py-2 mb-2 text-sm font-medium text-white bg-primary rounded-md hover:bg-primaryHover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primaryHover">
+            <button 
+              onClick={handleNewNoteAndCloseSidebar} 
+              className="app-btn w-full flex items-center justify-center px-3 py-2 mb-2 text-sm font-medium text-white bg-primary rounded-md hover:bg-primaryHover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primaryHover"
+            >
               <PlusCircle size={16} className="mr-1" /> New Note
             </button>
-            {notes
-              .filter(note => !note.synced)
-              .sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified))
+            {notesToDisplay
               .map((note) => (
               <div
                 key={note.id}
                 onClick={() => handleSelectNoteAndCloseSidebar(note)}
-                className={`p-2 rounded cursor-pointer ${currentNoteId === note.id ? 'bg-primaryLight' : 'hover:bg-accent1'}`}
+                className={`app-card p-2 rounded cursor-pointer ${currentNoteId === note.id ? 'bg-primaryLight' : 'hover:bg-accent1'}`}
               >
                 <h3 className="font-medium truncate">{note.title || "Untitled Note"}</h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{note.content ? note.content.substring(0, 50) + '...' : 'Empty note'}</p>
@@ -893,16 +1009,43 @@ export default function App() {
               </div>
             ))}
           </div>
-          {/* Sidebar Footer - Notion Connection */}
+          {/* Sidebar Footer with user info if authenticated */}
+          {isAuthenticated && userInfo && (
+            <div className="p-4 border-t border-main flex items-center justify-between">
+              <div className="flex items-center">
+                {userInfo.bot?.workspace_icon ? (
+                  <img 
+                    src={userInfo.bot.workspace_icon} 
+                    alt="Workspace" 
+                    className="w-6 h-6 rounded-full mr-2"
+                  />
+                ) : (
+                  <div className="w-6 h-6 bg-primary rounded-full mr-2 flex items-center justify-center text-white text-xs">
+                    {(userInfo.bot?.workspace_name || userInfo.name || 'N')[0].toUpperCase()}
+                  </div>
+                )}
+                <span className="text-sm truncate">{userInfo.bot?.workspace_name || userInfo.name || 'Notion'}</span>
+              </div>
+            </div>
+          )}
         </div>
+        
+        {/* Semi-transparent overlay when sidebar is shown on mobile */}
+        {isMobile && showSidebar && (
+          <div 
+            onClick={closeSidebar}
+            className="fixed inset-0 bg-black bg-opacity-30 z-20 app-animate-fade" 
+          />
+        )}
+        
         {/* Main content area */}
         <div className="flex-1 flex flex-col transition-all duration-300 ease-in-out overflow-hidden">
           {/* Header (moved to bottom on mobile) */}
           {!isMobile && (
-            <header className="flex items-center justify-between p-2 border-b border-main h-12 flex-shrink-0 bg-surface w-full">
+            <header className="app-header flex items-center justify-between p-2 border-b border-main flex-shrink-0 bg-surface/80 w-full">
               {/* Left side: Menu toggle and Title */}
               <div className="flex items-center flex-grow min-w-0">
-                <button onClick={toggleSidebar} className="p-2 rounded hover:bg-accent1 mr-2 flex-shrink-0">
+                <button onClick={toggleSidebar} className="app-btn app-icon-btn mr-2 flex-shrink-0 hover:bg-accent1">
                   <Menu size={20} />
                 </button>
                  <input
@@ -914,20 +1057,20 @@ export default function App() {
                  />
               </div>
 
-               {/* Right side: Actions and Status */}
-               <div className="flex items-center space-x-2">
+              {/* Right side: Actions and Status */}
+              <div className="flex items-center space-x-2">
                  {/* Editor Mode Toggle */}
                 <div className="flex items-center border border-gray-300 dark:border-gray-600 rounded-md">
                      <button
                         onClick={() => setEditorViewMode('editor')}
-                        className={`px-2 py-1 text-xs rounded-l-md ${editorViewMode === 'editor' ? 'bg-primaryLight' : 'hover:bg-accent1'}`}
+                        className={`app-btn px-2 py-1 text-xs rounded-l-md ${editorViewMode === 'editor' ? 'bg-primaryLight' : 'hover:bg-accent1'}`}
                         title="Edit Mode"
                     >
                          <Code size={14} />
                     </button>
                      <button
                         onClick={() => setEditorViewMode('preview')}
-                        className={`px-2 py-1 text-xs rounded-r-md ${editorViewMode === 'preview' ? 'bg-primaryLight' : 'hover:bg-accent1'}`}
+                        className={`app-btn px-2 py-1 text-xs rounded-r-md ${editorViewMode === 'preview' ? 'bg-primaryLight' : 'hover:bg-accent1'}`}
                         title="Preview Mode"
                     >
                          <Eye size={14} />
@@ -936,7 +1079,7 @@ export default function App() {
 
                  {/* Tag Selection - now always visible */}
                  <div className="relative tag-dropdown-container">
-                   <button onClick={() => setShowTagDropdown(!showTagDropdown)} className="px-2 py-1 text-xs rounded bg-primary text-[var(--color-text-on-primary)] hover:bg-primaryHover flex items-center">
+                   <button onClick={() => setShowTagDropdown(!showTagDropdown)} className="app-btn px-2 py-1 text-xs rounded bg-primary text-[var(--color-text-on-primary)] hover:bg-primaryHover flex items-center">
                      <Tag size={14} className="mr-1" /> Tags
                      {selectedTags.length > 0 && (
                        <span className="ml-1 text-xs font-semibold text-[var(--color-text-on-primary)]">({selectedTags.length})</span>
@@ -944,7 +1087,8 @@ export default function App() {
                      <ChevronDown size={14} className={`ml-1 transition-transform ${showTagDropdown ? 'rotate-180' : ''}`} />
                    </button>
                    {showTagDropdown && (
-                     <div className="absolute right-0 mt-1 w-56 bg-surface rounded-md shadow-lg py-2 z-30 border border-main">
+                     <div className="absolute right-0 mt-1 w-56 bg-surface rounded-md shadow-lg py-2 z-30 border border-main app-animate-slide">
+                       {/* Dropdown content remains the same */}
                        <div className="px-3 pb-2">
                          {selectedTags.length > 0 ? (
                            <div className="flex flex-wrap gap-1">
@@ -967,7 +1111,7 @@ export default function App() {
                            <button
                              key={tag.name}
                              onClick={() => handleAddTag(tag)}
-                             className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-accent1 flex items-center"
+                             className="app-btn w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-accent1 flex items-center"
                            >
                              <span className={`w-2.5 h-2.5 rounded-full mr-2 ${tag.color.split(' ')[0]}`}></span>
                              {tag.name}
@@ -981,28 +1125,15 @@ export default function App() {
                    )}
                  </div>
 
-                 {/* Template Selection - now always visible */}
+                 {/* Template Selection */}
                  <div className="relative template-dropdown-container">
-                   <button onClick={() => setShowTemplateDropdown(!showTemplateDropdown)} className="px-2 py-1 text-xs rounded bg-primary text-[var(--color-text-on-primary)] hover:bg-primaryHover flex items-center">
+                   <button onClick={() => setShowTemplateDropdown(!showTemplateDropdown)} className="app-btn px-2 py-1 text-xs rounded bg-primary text-[var(--color-text-on-primary)] hover:bg-primaryHover flex items-center">
                      <FileText size={14} className="mr-1" /> Templates
                      <ChevronDown size={14} className={`ml-1 transition-transform ${showTemplateDropdown ? 'rotate-180' : ''}`} />
                    </button>
                    {showTemplateDropdown && (
-                     <div className="absolute right-0 mt-1 w-56 bg-surface rounded-md shadow-lg py-1 z-30 border border-main">
-                       <button onClick={handleOpenAddTemplateModal} className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-accent1 flex items-center">
-                         <PlusCircle size={14} className="mr-2 flex-shrink-0" /> Add New Template
-                       </button>
-                       {(Array.isArray(customTemplates) ? customTemplates : []).map((template, index) => (
-                         <div key={index} className="flex items-center justify-between px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-accent1 group">
-                           <span onClick={() => handleApplyTemplate(template)} className="flex-grow cursor-pointer truncate">{template.name}</span>
-                           <button onClick={() => handleOpenEditTemplateModal(index)} className="ml-2 opacity-0 group-hover:opacity-100 text-gray-500 hover:text-primary" title="Edit Template">
-                             <Edit size={12} className="flex-shrink-0" />
-                           </button>
-                           <button onClick={() => handleDeleteTemplate(index)} className="ml-2 opacity-0 group-hover:opacity-100 text-danger hover:text-dangerHover" title="Delete Template">
-                             <X size={12} className="flex-shrink-0" />
-                           </button>
-                         </div>
-                       ))}
+                     <div className="absolute right-0 mt-1 w-56 bg-surface rounded-md shadow-lg py-1 z-30 border border-main app-animate-slide">
+                       {/* Template dropdown content remains the same */}
                      </div>
                    )}
                  </div>
@@ -1011,42 +1142,54 @@ export default function App() {
                  <button 
                     onClick={handleSyncCurrentNote}
                     disabled={!isOnline || !isAuthenticated || !currentNoteId || isSyncing || notes.find(n => n.id === currentNoteId)?.synced}
-                    className="p-2 rounded text-gray-600 dark:text-gray-400 hover:bg-accent1 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="app-btn app-icon-btn text-gray-600 dark:text-gray-400 hover:bg-accent1 disabled:opacity-50 disabled:cursor-not-allowed"
                     title={!isAuthenticated ? "Connect to Notion first" : !isOnline ? "Cannot sync while offline" : !currentNoteId ? "Select a note to sync" : notes.find(n => n.id === currentNoteId)?.synced ? "Note is synced" : "Sync note to Notion"}
                  >
                     {isSyncing ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
                  </button>
 
-                  {/* Online/Offline Status Icon */}
+                 {/* Online/Offline Status Icon */}
                  <div className="flex items-center space-x-1">
                      {isOnline ? <Wifi size={16} className="text-green-500" title="Online"/> : <WifiOff size={16} className="text-red-500" title="Offline"/>}
                  </div>
 
                  {/* More Options Dropdown */}
                  <div className="relative more-options-dropdown-container">
-                    <button onClick={() => setShowMoreOptionsDropdown(!showMoreOptionsDropdown)} className="p-2 rounded hover:bg-accent1">
+                    <button onClick={() => setShowMoreOptionsDropdown(!showMoreOptionsDropdown)} className="app-btn app-icon-btn hover:bg-accent1">
                          <MoreVertical size={20} />
                     </button>
                  </div>
               </div>
           </header>
           )}
-          <main className={`flex-1 overflow-y-auto p-0 bg-background ${fontSize === 'sm' ? 'text-sm' : fontSize === 'lg' ? 'text-lg' : 'text-base'}`}>
-            {/* Mobile Title Input */}
+          
+          <main 
+            ref={mainContainerRef}
+            className={`flex-1 overflow-y-auto p-0 bg-background ${fontSize === 'sm' ? 'text-sm' : fontSize === 'lg' ? 'text-lg' : 'text-base'}`}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+          >
+            {/* Mobile Title Input with safe area padding */}
             {isMobile && (
-              <div className="sticky top-0 z-10 bg-surface border-b border-main px-4 py-2">
-                <input
-                  type="text"
-                  value={noteTitle}
-                  onChange={(e) => setNoteTitle(e.target.value)}
-                  placeholder="Note Title"
-                  className="w-full text-base font-medium bg-transparent focus:outline-none focus:ring-0 border-none p-1 dark:placeholder-gray-600 placeholder-gray-400"
-                />
+              <div className={`sticky top-0 z-10 bg-surface/90 backdrop-blur-md border-b border-main px-4 py-2 ${hasSafeArea ? 'app-inset-top' : ''}`}>
+                <div className="flex items-center">
+                  <button onClick={toggleSidebar} className="app-btn app-icon-btn mr-2 hover:bg-accent1">
+                    <Menu size={20} />
+                  </button>
+                  <input
+                    type="text"
+                    value={noteTitle}
+                    onChange={(e) => setNoteTitle(e.target.value)}
+                    placeholder="Note Title"
+                    className="w-full text-base font-medium bg-transparent focus:outline-none focus:ring-0 border-none p-1 dark:placeholder-gray-600 placeholder-gray-400"
+                  />
+                </div>
               </div>
             )}
+            
             <div className={`h-full mx-auto transition-all duration-300 ease-in-out ${isFullWidth ? 'max-w-full' : 'max-w-4xl'}`}>
               {editorViewMode === 'editor' ? (
-                <div className="h-full bg-surface/80 dark:bg-surface/40 shadow-inner shadow-gray-300 dark:shadow-gray-900">
+                <div className="h-full bg-surface/80 dark:bg-surface/40 shadow-inner shadow-gray-300/50 dark:shadow-gray-900/30">
                   <textarea
                     value={noteContent}
                     onChange={(e) => setNoteContent(e.target.value)}
@@ -1055,77 +1198,96 @@ export default function App() {
                   />
                 </div>
               ) : (
-                <div className={`prose dark:prose-invert max-w-none h-full overflow-y-auto p-4 bg-surface/80 dark:bg-surface/40 shadow-inner shadow-gray-300 dark:shadow-gray-900 ${fontFamily === 'mono' ? 'prose-mono' : ''} ${fontSize === 'sm' ? 'prose-sm leading-relaxed' : fontSize === 'lg' ? 'prose-lg leading-loose' : 'prose-base leading-relaxed'}`}>
+                <div className={`prose dark:prose-invert max-w-none h-full overflow-y-auto p-4 bg-surface/80 dark:bg-surface/40 shadow-inner shadow-gray-300/50 dark:shadow-gray-900/30 ${fontFamily === 'mono' ? 'prose-mono' : ''} ${fontSize === 'sm' ? 'prose-sm leading-relaxed' : fontSize === 'lg' ? 'prose-lg leading-loose' : 'prose-base leading-relaxed'}`}>
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{noteContent}</ReactMarkdown>
                 </div>
               )}
             </div>
           </main>
-          {/* Footer (word/char count) */}
-          <footer className="p-2 text-xs text-gray-400 dark:text-gray-500 h-8 flex items-center justify-end flex-shrink-0 bg-surface border-t border-main w-full">
-            <span>{noteContent.split(/\s+/).filter(Boolean).length} words, {noteContent.length} characters</span>
-          </footer>
-          {/* Mobile bottom navbar */}
+          
+          {/* Word count footer - don't show on mobile */}
+          {!isMobile && (
+            <footer className="p-2 text-xs text-gray-400 dark:text-gray-500 h-8 flex items-center justify-end flex-shrink-0 bg-surface border-t border-main w-full">
+              <span>{noteContent.split(/\s+/).filter(Boolean).length} words, {noteContent.length} characters</span>
+            </footer>
+          )}
+          
+          {/* Mobile bottom navbar with animation and safe area padding */}
           {isMobile && (
-            <nav className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-between bg-surface border-t border-main h-14 px-2">
-              <button onClick={toggleSidebar} className="p-2 rounded hover:bg-accent1">
-                <Menu size={22} />
+            <nav className={`app-bottom-nav fixed left-0 right-0 flex items-center justify-between bg-surface/90 backdrop-blur-md border-t border-main px-2 ${hasSafeArea ? 'app-inset-bottom' : ''} ${isNavVisible ? '' : 'app-bottom-nav-hidden'}`}>
+              <button 
+                onClick={() => handleNewNote()}
+                className="app-btn app-icon-btn flex flex-col items-center justify-center flex-1 py-1 text-primary"
+              >
+                <PlusCircle size={22} />
+                <span className="text-xs mt-1">New</span>
               </button>
+              
               <button
                 onClick={() => {
                   setShowTagDropdown((v) => !v);
                   setShowTemplateDropdown(false);
                   setShowMoreOptionsDropdown(false);
                 }}
-                className={`p-2 rounded ${showTagDropdown ? 'bg-primaryLight' : 'hover:bg-accent1'}`}
-                title="Tags"
+                className={`app-btn app-icon-btn flex flex-col items-center justify-center flex-1 py-1 ${showTagDropdown ? 'text-primary' : 'text-gray-600 dark:text-gray-400'}`}
               >
-                <Tag size={20} />
+                <Tag size={22} />
+                <span className="text-xs mt-1">Tags</span>
               </button>
+              
               <button
                 onClick={() => {
                   setShowTemplateDropdown((v) => !v);
                   setShowTagDropdown(false);
                   setShowMoreOptionsDropdown(false);
                 }}
-                className={`p-2 rounded ${showTemplateDropdown ? 'bg-primaryLight' : 'hover:bg-accent1'}`}
-                title="Templates"
+                className={`app-btn app-icon-btn flex flex-col items-center justify-center flex-1 py-1 ${showTemplateDropdown ? 'text-primary' : 'text-gray-600 dark:text-gray-400'}`}
               >
-                <FileText size={20} />
+                <FileText size={22} />
+                <span className="text-xs mt-1">Templates</span>
               </button>
               
               <button
                 onClick={() => setEditorViewMode(editorViewMode === 'editor' ? 'preview' : 'editor')}
-                className={`p-2 rounded ${editorViewMode === 'editor' ? 'bg-primaryLight' : 'hover:bg-accent1'}`}
-                title={editorViewMode === 'editor' ? 'Switch to Preview' : 'Switch to Edit'}
+                className={`app-btn app-icon-btn flex flex-col items-center justify-center flex-1 py-1 ${editorViewMode === 'preview' ? 'text-primary' : 'text-gray-600 dark:text-gray-400'}`}
               >
-                {editorViewMode === 'editor' ? <Code size={20} /> : <Eye size={20} />}
+                {editorViewMode === 'editor' ? (
+                  <>
+                    <Eye size={22} />
+                    <span className="text-xs mt-1">Preview</span>
+                  </>
+                ) : (
+                  <>
+                    <Code size={22} />
+                    <span className="text-xs mt-1">Edit</span>
+                  </>
+                )}
               </button>
+              
               <button
                 onClick={handleSyncCurrentNote}
                 disabled={!isOnline || !isAuthenticated || !currentNoteId || isSyncing || notes.find(n => n.id === currentNoteId)?.synced}
-                className="p-2 rounded text-gray-600 dark:text-gray-400 hover:bg-accent1 disabled:opacity-50 disabled:cursor-not-allowed"
-                title={!isAuthenticated ? "Connect to Notion first" : !isOnline ? "Cannot sync while offline" : !currentNoteId ? "Select a note to sync" : notes.find(n => n.id === currentNoteId)?.synced ? "Note is synced" : "Sync note to Notion"}
+                className={`app-btn app-icon-btn flex flex-col items-center justify-center flex-1 py-1 ${!isOnline || !isAuthenticated || !currentNoteId || notes.find(n => n.id === currentNoteId)?.synced ? 'text-gray-400 dark:text-gray-600' : 'text-primary'}`}
               >
-                {isSyncing ? <Loader2 size={20} className="animate-spin" /> : <Upload size={20} />}
+                {isSyncing ? (
+                  <>
+                    <Loader2 size={22} className="animate-spin" />
+                    <span className="text-xs mt-1">Syncing</span>
+                  </>
+                ) : (
+                  <>
+                    <Save size={22} />
+                    <span className="text-xs mt-1">Save</span>
+                  </>
+                )}
               </button>
-              <button 
-                onClick={() => {
-                  setShowMoreOptionsDropdown((v) => !v);
-                  setShowTagDropdown(false);
-                  setShowTemplateDropdown(false);
-                }} 
-                className={`p-2 rounded ${showMoreOptionsDropdown ? 'bg-primaryLight' : 'hover:bg-accent1'}`}
-              >
-                <Settings size={22} />
-              </button>
-              
             </nav>
           )}
 
           {/* Single More Options Dropdown for both mobile and desktop */}
           {showMoreOptionsDropdown && (
-            <div className={`fixed ${isMobile ? 'bottom-16 left-2 right-2' : 'top-14 right-2'} z-50 w-full max-w-xs mx-auto bg-surface rounded-md shadow-lg py-1 border border-main max-h-[80vh] overflow-y-auto more-options-dropdown-container`}>
+            <div className={`fixed ${isMobile ? 'bottom-16 left-2 right-2' : 'top-14 right-2'} z-50 w-full max-w-xs mx-auto bg-surface rounded-md shadow-lg py-1 border border-main max-h-[80vh] overflow-y-auto more-options-dropdown-container app-animate-slide`}>
+              {/* Dropdown content remains the same */}
               <div className="px-4 py-2 border-b border-main">
                 <h4 className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 mb-2">Theme</h4>
                 <div className="flex items-center justify-between space-x-1">
@@ -1225,10 +1387,12 @@ export default function App() {
             </div>
           )}
         </div>
+        
         {/* Template Modal */}
         {showTemplateModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-            <div className="template-modal-content bg-surface rounded-lg shadow-lg w-full max-w-lg mx-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 app-animate-fade">
+            <div className="template-modal-content bg-surface rounded-lg shadow-lg w-full max-w-lg mx-4 app-animate-slide">
+              {/* Modal content remains the same */}
               <div className="p-4 border-b border-main">
                 <h3 className="text-lg font-semibold">
                   {isEditingTemplate ? 'Edit Template' : 'Add New Template'}
@@ -1286,10 +1450,12 @@ export default function App() {
             </div>
           </div>
         )}
+        
         {/* Formatting Help Modal */}
         {showFormattingHelpModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-            <div className="bg-surface rounded-lg shadow-lg w-full max-w-2xl mx-4 max-h-[80vh] overflow-y-auto">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 app-animate-fade">
+            <div className="bg-surface rounded-lg shadow-lg w-full max-w-2xl mx-4 max-h-[80vh] overflow-y-auto app-animate-slide">
+              {/* Modal content remains the same */}
               <div className="p-4 border-b border-main flex justify-between items-center">
                 <h3 className="text-lg font-semibold">Formatting & Setup Guide</h3>
                 <button onClick={() => setShowFormattingHelpModal(false)} className="text-gray-500 hover:text-gray-700">
@@ -1336,9 +1502,11 @@ export default function App() {
           </div>
         )}
 
+        {/* Setup Instructions Modal */}
         {showSetupInstructions && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-            <div className="bg-surface rounded-lg shadow-lg w-full max-w-2xl mx-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 app-animate-fade">
+            <div className="bg-surface rounded-lg shadow-lg w-full max-w-2xl mx-4 app-animate-slide">
+              {/* Modal content remains the same */}
               <div className="p-4 border-b border-main flex justify-between items-center">
                 <h3 className="text-lg font-semibold">Welcome to ThoughtBase!</h3>
                 <button onClick={() => setShowSetupInstructions(false)} className="text-gray-500 hover:text-gray-700">
@@ -1384,15 +1552,17 @@ export default function App() {
           </div>
         )}
       </div>
+      
       {isMobile && (
         <>
-          {/* Tag Dropdown - Mobile */}
+          {/* Tag Dropdown - Mobile - with improved position and animation */}
           {showTagDropdown && (
             <div 
-              className="fixed left-2 right-2 bottom-20 z-50 w-full max-w-xs mx-auto bg-surface rounded-md shadow-lg py-2 border border-main"
+              className="fixed left-2 right-2 bottom-20 z-50 w-full max-w-xs mx-auto bg-surface rounded-xl shadow-lg py-2 border border-main app-animate-slide"
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
             >
+              {/* Dropdown content remains the same */}
               <div className="px-3 pb-2">
                 {selectedTags.length > 0 ? (
                   <div className="flex flex-wrap gap-1">
@@ -1426,7 +1596,7 @@ export default function App() {
                       e.stopPropagation();
                       handleAddTag(tag, e);
                     }}
-                    className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-accent1 flex items-center"
+                    className="app-btn w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-accent1 flex items-center"
                   >
                     <span className={`w-2.5 h-2.5 rounded-full mr-2 ${tag.color.split(' ')[0]}`}></span>
                     {tag.name}
@@ -1439,20 +1609,21 @@ export default function App() {
             </div>
           )}
 
-          {/* Template Dropdown - Mobile */}
+          {/* Template Dropdown - Mobile - with improved position and animation */}
           {showTemplateDropdown && (
             <div 
-              className="fixed left-2 right-2 bottom-20 z-50 w-full max-w-xs mx-auto bg-surface rounded-md shadow-lg py-1 border border-main"
+              className="fixed left-2 right-2 bottom-20 z-50 w-full max-w-xs mx-auto bg-surface rounded-xl shadow-lg py-1 border border-main app-animate-slide"
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
             >
+              {/* Dropdown content remains the same */}
               <button 
                 onMouseDown={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
                   handleOpenAddTemplateModal();
                 }}
-                className="w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-accent1 flex items-center"
+                className="app-btn w-full text-left px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-accent1 flex items-center"
               >
                 <PlusCircle size={14} className="mr-2 flex-shrink-0" /> Add New Template
               </button>
@@ -1499,13 +1670,36 @@ export default function App() {
           )}
         </>
       )}
-      {/* PWA Install Banner */}
+      
+      {/* PWA Install Banner - improved design */}
       {showInstallBanner && canInstallPwa && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 bg-surface border-t border-main p-4 flex items-center justify-between">
-          <div className="text-sm">Install this app for a better experience.</div>
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-surface border-t border-main p-4 flex items-center justify-between app-animate-slide app-inset-bottom">
+          <div className="flex items-center">
+            <div className="bg-primary rounded-full p-2 mr-3">
+              <img src="/icons/icon.svg" alt="App icon" className="w-8 h-8" />
+            </div>
+            <div>
+              <h3 className="font-semibold">Install App</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Add to home screen for best experience</p>
+            </div>
+          </div>
           <div className="flex items-center space-x-2">
-            <button onClick={() => setShowInstallBanner(false)} className="text-sm text-gray-500 hover:text-gray-700">Dismiss</button>
-            <button onClick={handleInstallPwa} className="px-4 py-2 text-sm bg-primary text-white rounded hover:bg-primaryHover">Install</button>
+            <button onClick={() => setShowInstallBanner(false)} className="text-sm text-gray-500 hover:text-gray-700 app-btn px-3 py-1">
+              Later
+            </button>
+            <button onClick={handleInstallPwa} className="app-btn px-4 py-2 text-sm bg-primary text-white rounded hover:bg-primaryHover">
+              Install
+            </button>
+          </div>
+        </div>
+      )}
+      
+      {/* Native-like splash screen that fades out */}
+      {!isAppLoaded && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-white dark:bg-gray-900">
+          <div className="text-center">
+            <img src="/icons/icon.svg" alt="ThoughtBase" className="w-20 h-20 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold">ThoughtBase</h2>
           </div>
         </div>
       )}

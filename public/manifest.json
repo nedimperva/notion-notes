@@ -5,7 +5,7 @@
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#2DD4BF",
+  "theme_color": "#ff8a65",
   "icons": [
     {
       "src": "/icons/icon-192x192.png",
@@ -28,8 +28,45 @@
   ],
   "scope": "/",
   "orientation": "portrait",
-  "categories": ["productivity", "utilities"],
-  "screenshots": [],
+  "categories": ["productivity", "utilities", "notes"],
+  "screenshots": [
+    {
+      "src": "/screenshots/light-mode.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "platform": "wide",
+      "label": "Light Mode"
+    },
+    {
+      "src": "/screenshots/dark-mode.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "platform": "wide",
+      "label": "Dark Mode"
+    },
+    {
+      "src": "/screenshots/mobile-view.png",
+      "sizes": "720x1280",
+      "type": "image/png",
+      "platform": "narrow",
+      "label": "Mobile View"
+    }
+  ],
+  "prefer_related_applications": false,
+  "shortcuts": [
+    {
+      "name": "New Note",
+      "short_name": "New",
+      "url": "/?new=true",
+      "description": "Create a new note",
+      "icons": [
+        {
+          "src": "/icons/icon-96x96.png", 
+          "sizes": "96x96"
+        }
+      ]
+    }
+  ],
   "share_target": {
     "action": "/share-target",
     "enctype": "multipart/form-data",
@@ -45,5 +82,13 @@
         }
       ]
     }
-  }
+  },
+  "edge_side_panel": {
+    "preferred_width": 400
+  },
+  "capture_links": "existing-client-navigate",
+  "lang": "en-US",
+  "dir": "ltr",
+  "iarc_rating_id": "",
+  "related_applications": []
 }
